@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Jan 29 16:35:34 2018
+Created on Mon Jan 29, 2018
 
-@author: Brian
+@author: Brian Knisely
 
 The purpose of this code is to use finite difference to solve an elliptic
 partial differential equation.
@@ -27,4 +27,3 @@ Nx = 100  # number of nodes in x-direction
 Ny = 100  # number of nodes in y-direction
 
 u = np.zeros([Ny, Nx])
-np.shape(u)
