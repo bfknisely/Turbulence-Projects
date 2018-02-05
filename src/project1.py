@@ -15,15 +15,24 @@ Subject to the following boundary conditions (BCs):
     u(0, y) = y
 
 The Crank-Nicolson Algorithm is to be used to march in the x-direction, using
-a uniform grid and central differencing scheme that is fourth-order in y and
-second-order in x.
+a uniform grid and central differencing scheme that is fourth-order in y.
 """
 
-# Import packages for arrays and plotting
+# %% Import packages for arrays and plotting
 import numpy as np
 import matplotlib.pyplot as plt
 
-Nx = 100  # number of nodes in x-direction
-Ny = 100  # number of nodes in y-direction
+# %% Initialize grid
+
+Nx = 21  # number of nodes in x-direction
+Ny = 21  # number of nodes in y-direction
+
+x = np.linspace(0, 1, Nx)
+y = np.linspace(0, 1, Ny)
 
 u = np.zeros([Ny, Nx])
+
+xx, yy = np.meshgrid(x, y, sparse=True)
+z = xx + yy
+
+plt.contourf(x,y,z)
