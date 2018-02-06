@@ -86,6 +86,5 @@ plt.xticks(fontsize=fs-5, fontname=fn, fontweight='bold')
 plt.yticks(fontsize=fs-5, fontname=fn, fontweight='bold')
 
 cbar.ax.set_ylabel('u', rotation=0, fontname=fn, fontsize=fs, weight='bold')
-cbar.ax.ticks(fontweight='bold')
 #cbar.set_label('     u', rotation=0, fontsize=fs, fontname=fn,
 #               fontweight='bold')
