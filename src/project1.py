@@ -52,17 +52,25 @@ u[-1, :] = 1  # Set last row, all columns to be 1
 u[:, 0] = y  # Set all rows, 0th column to be y
 
 
-# %% Set up matrix for internal nodes
+# %% Set up matrix for internal nodes using Crank-Nicolson algorithmS
 
 # Initialize matrix A for equation [[A]]*[u] = [b]
 A = np.zeros([Ny - 2, Ny - 2])
 # Y-dimension reduced by two because u(x, 0) and u(x, 1) are known already
 
-# Use 2nd-Order-Accurate scheme at j = Ny-1 and j = 2
-i = 0
-j = 0
+# Use 2nd-Order-Accurate scheme at j = Ny - 1 and j = 1
+# at j = 1
+A[0, 0] = 1
+A[0, 1] = 1
 
-# Use 4th-Order-Accurate scheme for j = 3 to j = Ny - 2
+# at j = Ny - 1
+A[-1, -1] = -1
+A[-1, -2] = -2
+
+
+print(A)
+
+# Use 4th-Order-Accurate scheme for j = 2 to j = Ny - 2
 
 
 # %% Use LU Decomposition matrix solver (Thomas algorithm)
@@ -70,9 +78,8 @@ j = 0
 
 # %% Display results spatially
 
-#    z = xx**2.5 + yy**2.5
 plt.figure(figsize=(6, 4))
-plt.contourf(x, y, u, cmap='inferno')
+plt.contourf(x, y, u, cmap='plasma')
 cbar = plt.colorbar()
 xlab = 'x'
 ylab = 'y'
@@ -82,9 +89,11 @@ figFileName = 'fig1.png'
 plt.xlabel(xlab, fontsize=fs, fontname=fn, fontweight='bold')
 plt.ylabel(ylab + '     ', fontsize=fs, rotation=0, fontname=fn,
            fontweight='bold')
-plt.xticks(fontsize=fs-5, fontname=fn, fontweight='bold')
-plt.yticks(fontsize=fs-5, fontname=fn, fontweight='bold')
-
-cbar.ax.set_ylabel('u', rotation=0, fontname=fn, fontsize=fs, weight='bold')
-#cbar.set_label('     u', rotation=0, fontsize=fs, fontname=fn,
-#               fontweight='bold')
+plt.xticks(fontsize=fs-2, fontname=fn, fontweight='bold')
+plt.yticks(fontsize=fs-2, fontname=fn, fontweight='bold')
+cbar.ax.set_ylabel('    u', rotation=0, fontname=fn, fontsize=fs,
+                   weight='bold')
+cbar.ax.set_yticklabels(
+        [round(cbar.get_ticks()[n], 2) for n in range(len(cbar.get_ticks()))],
+        fontsize=fs-2, fontname=fn, weight='bold')
+plt.close()
