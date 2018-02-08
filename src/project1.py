@@ -21,10 +21,12 @@ a uniform grid and central differencing scheme that is fourth-order in y.
 # %% Import packages for arrays and plotting
 import numpy as np
 from numpy.linalg import inv
+import scipy.linalg
 import matplotlib.pyplot as plt
 
 # %% Initialize uniform grid
 
+plotOn = 0  # Determine whether to generate plots or not
 Nx = 21  # number of nodes in x-direction
 Ny = 21  # number of nodes in y-direction
 
@@ -112,14 +114,18 @@ for i in range(len(x)-1):
                 + (1/dx-5/(4*dy**2))*U[j+1, i] + 2/(3*dy**2)*U[j+2, i]
                 + (-1/(24*dy**2))*U[j+3, i])
 
-#    print(A[0:5, 0:5])
-#    print(A[-5:, -5:])
-#    print(b)
 
     # %% Use LU Decomposition matrix solver (Thomas algorithm)
 
-    # skip this for now, use built-in matrix solver to test
+    a = np.zeros(np.shape(A)[0])
+    a = np.zeros(np.shape(A)[0])
+    a = np.zeros(np.shape(A)[0])
+    a = np.zeros(np.shape(A)[0])
+    a = np.zeros(np.shape(A)[0])
+    # use built-in matrix solver and scipy LU function to test
     U[1:-1, i+1] = (inv(A)@b).transpose()
+    p, lower, upper = scipy.linalg.lu(A)
+    break
 
 # %% Display results spatially
 
@@ -127,13 +133,10 @@ for i in range(len(x)-1):
 plt.figure(figsize=(6, 4))
 plt.contourf(x, y, U, cmap='plasma')
 cbar = plt.colorbar()
-xlab = 'x'
-ylab = 'y'
 fs = 17  # Define font size for figures
 fn = 'Calibri'  # Define font for figures
-figFileName = 'fig1.png'
-plt.xlabel(xlab, fontsize=fs, fontname=fn, fontweight='bold')
-plt.ylabel(ylab + '     ', fontsize=fs, rotation=0, fontname=fn,
+plt.xlabel('x', fontsize=fs, fontname=fn, fontweight='bold')
+plt.ylabel('y' + '     ', fontsize=fs, rotation=0, fontname=fn,
            fontweight='bold')
 plt.xticks(fontsize=fs-2, fontname=fn, fontweight='bold')
 plt.yticks(fontsize=fs-2, fontname=fn, fontweight='bold')
@@ -142,6 +145,26 @@ cbar.ax.set_ylabel('    u', rotation=0, fontname=fn, fontsize=fs,
 cbar.ax.set_yticklabels(
         [round(cbar.get_ticks()[n], 2) for n in range(len(cbar.get_ticks()))],
         fontsize=fs-2, fontname=fn, weight='bold')
-plt.close()
+if plotOn == 0:
+    plt.close()
 
-# Look at solution at various x-locations
+# Look at solution at selected x-locations
+xLocs = [0.05, 0.1, 0.2, 0.5, 1.0]
+lines = ['y-', 'r-.', 'm--', 'b:', 'k-']
+# Loop for each x-location to make plots at each location comparing exact
+# solution with analytical solution
+legStr = []
+for n in range(len(xLocs)):
+    col = np.argmin(abs(x-xLocs[n]))  # extract value closest to current xLoc
+    plt.figure(num=0)  # create figure numbered for this loop number
+    plt.plot(U[:, col], y, lines[n])
+    legStr.append('x = {}'.format(xLocs[n]))
+
+leg = plt.legend(legStr, fontsize=fs-2)
+plt.xlabel('x', fontsize=fs, fontname=fn, fontweight='bold')
+plt.ylabel('y' + '     ', fontsize=fs, rotation=0, fontname=fn,
+           fontweight='bold')
+plt.xticks(fontsize=fs-2, fontname=fn, fontweight='bold')
+plt.yticks(fontsize=fs-2, fontname=fn, fontweight='bold')
+if plotOn == 0:
+    plt.close()
