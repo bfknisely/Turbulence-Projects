@@ -56,7 +56,6 @@ U[-1, :] = 1  # Set last row, all columns to be 1
 U[:, 0] = y  # Set all rows, 0th column to be y
 
 
-
 for i in range(len(x)-1):
 
     # %% Set up matrix and RHS "b" matrix (knowns) for Crank-Nicolson algorithm
@@ -85,7 +84,6 @@ for i in range(len(x)-1):
 
     # # # Use 4th-Order-Accurate scheme for j = 2 to j = Ny-3
 
-    # j = 2
     A[1, 0] = -2/(3*dy**2)
     A[1, 1] = 5/(4*dy**2) + 1/dx
     A[1, 2] = -2/(3*dy**2)
@@ -114,17 +112,24 @@ for i in range(len(x)-1):
                 + (1/dx-5/(4*dy**2))*U[j+1, i] + 2/(3*dy**2)*U[j+2, i]
                 + (-1/(24*dy**2))*U[j+3, i])
 
-
     # %% Use LU Decomposition matrix solver (Thomas algorithm)
 
-    a = np.zeros(np.shape(A)[0])
-    a = np.zeros(np.shape(A)[0])
-    a = np.zeros(np.shape(A)[0])
-    a = np.zeros(np.shape(A)[0])
-    a = np.zeros(np.shape(A)[0])
+    lower = np.eye(np.shape(A)[0])  # initialize lower array with identity
+    upper = np.zeros([np.shape(A)[0], np.shape(A)[0]])  # initialize upper
+    for n in range(2, np.shape(A)[0]-2):
+        upper[n, n] = A[n, n]
+        lower[n, n-2] = A[n, n-2]
+        upper[n, n+1] = A[n, n+1] - lower[1, 2]*upper[3, 1]
+        upper[n, n+2] = A[n, n+2]
+        
     # use built-in matrix solver and scipy LU function to test
     U[1:-1, i+1] = (inv(A)@b).transpose()
-    p, lower, upper = scipy.linalg.lu(A)
+    p_ans, lower_ans, upper_ans = scipy.linalg.lu(A)
+    print(upper_ans[0:4, 0:4])
+    print(upper[0:4, 0:4])
+    
+    print(lower_ans[0:4, 0:4])
+    print(lower[0:4, 0:4])
     break
 
 # %% Display results spatially
