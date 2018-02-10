@@ -114,22 +114,47 @@ for i in range(len(x)-1):
 
     # %% Use LU Decomposition matrix solver (Thomas algorithm)
 
-    lower = np.eye(np.shape(A)[0])  # initialize lower array with identity
-    upper = np.zeros([np.shape(A)[0], np.shape(A)[0]])  # initialize upper
+    yVec = np.zeros([Ny - 2, 1])  # initialize y vector for LU decomposition
+
+    lo = np.eye(np.shape(A)[0])  # initialize lower array with identity
+    up = np.zeros([np.shape(A)[0], np.shape(A)[0]])  # initialize upper
+
+    # Assign values at beginning of matrix
+    up[0, 0:3] = A[0, 0:3]
+    lo[1, 0] = A[1, 0]/up[0, 0]
+    up[1, 3] = A[1, 3]
+    up[1, 2] = A[1, 2] - lo[1, 0]*up[0, 2]
+    up[1, 1] = A[1, 1] - lo[1, 0]*up[0, 1]
+
+    # Assign values in middle of matrix
     for n in range(2, np.shape(A)[0]-2):
-        upper[n, n] = A[n, n]
-        lower[n, n-2] = A[n, n-2]
-        upper[n, n+1] = A[n, n+1] - lower[1, 2]*upper[3, 1]
-        upper[n, n+2] = A[n, n+2]
-        
+        up[n, n+2] = A[n, n+2]
+        lo[n, n-2] = A[n, n-2]/up[n-2, n-2]
+        lo[n, n-1] = (A[n, n-1] - lo[n, n-2]*up[n-2, n-1])/up[n-1, n-1]
+        up[n, n+1] = A[n, n+1] - lo[n, n-1]*up[n-1, n+1]
+        up[n, n] = A[n, n] - lo[n, n-2]*up[n-2, n] - lo[n, n-1]*up[n-1, n]
+
+    # Assign values at end of matrix
+    lo[-2, -4] = A[-2, -4]/up[-4, -4]
+    lo[-2, -3] = (A[-2, -3] - lo[-2, -4]*up[-4, -3])/up[-3, -3]
+    up[-2, -1] = A[-2, -1] - lo[-2, -3]*up[-3, -1]
+    up[-2, -2] = A[-2, -2] - lo[-2, -4]*up[-4, -2] - lo[-2, -3]*up[-3, -2]
+
+    lo[-1, -3] = A[-1, -3]/up[-3, -3]
+    lo[-1, -2] = (A[-1, -2] - lo[-1, -3]*up[-3, -2])/up[-2, -2]
+    up[-1, -1] = A[-1, -1] - lo[-1, -3]*up[-3, -1] - lo[-1, -2]*up[-2, -1]
+
+    # Solve for y vector in lo*yVec = b by forward substitution
+    yVec[0] = b[0]/lo[0, 0]
+    for n in range(1, len(yVec)):
+        tot = 
+        yVec[1] = 1/lo[1, 1] * (b[1] - (lo[1, 0]*y[0]))
+        yVec[2] = 1/lo[2, 2] * (b[2] - (lo[2, 0]*y[0] + lo[2, 1]*y[1]))
+
     # use built-in matrix solver and scipy LU function to test
-    U[1:-1, i+1] = (inv(A)@b).transpose()
-    p_ans, lower_ans, upper_ans = scipy.linalg.lu(A)
-    print(upper_ans[0:4, 0:4])
-    print(upper[0:4, 0:4])
-    
-    print(lower_ans[0:4, 0:4])
-    print(lower[0:4, 0:4])
+    U[1:-1, i+1] = (inv(A)@b).transpose()  # Use built-in transpose operator
+    p_ans, lo_ans, up_ans = scipy.linalg.lu(A)  # Use built-in LU decomposition
+
     break
 
 # %% Display results spatially
