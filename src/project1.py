@@ -114,7 +114,8 @@ for i in range(len(x)-1):
 
     # %% Use LU Decomposition matrix solver (Thomas algorithm)
 
-    yVec = np.zeros([Ny - 2, 1])  # initialize y vector for LU decomposition
+    yVec = np.zeros([1, Ny - 2])  # initialize y vector for LU decomposition
+    xVec = np.zeros([1, Ny - 2])  # initialize x vector for LU decomposition
 
     lo = np.eye(np.shape(A)[0])  # initialize lower array with identity
     up = np.zeros([np.shape(A)[0], np.shape(A)[0]])  # initialize upper
@@ -145,13 +146,19 @@ for i in range(len(x)-1):
     up[-1, -1] = A[-1, -1] - lo[-1, -3]*up[-3, -1] - lo[-1, -2]*up[-2, -1]
 
     # Solve for y vector in lo*yVec = b by forward substitution
-    yVec[0] = b[0]/lo[0, 0]
-    for n in range(1, len(yVec)):
-        tot = 
-        yVec[1] = 1/lo[1, 1] * (b[1] - (lo[1, 0]*y[0]))
-        yVec[2] = 1/lo[2, 2] * (b[2] - (lo[2, 0]*y[0] + lo[2, 1]*y[1]))
+    yVec[0] = b[0]/lo[0, 0]  # Calculate 0th element of y vector
+    for n in range(1, np.shape(yVec)[1]):
+        # Compute nth value of y vector
+        yVec[0, n] = 1/lo[n, n] * (b[n] - sum(lo[n, 0:n] * yVec[0, 0:n]))
 
-    # use built-in matrix solver and scipy LU function to test
+    # Solve for x vector in up*xVec = yVec
+    xVec[-1] = yVec[-1]/up[-1, -1]  # Calculate last element of x vector
+    for n in np.arange(18, -1, -1):
+        # Step backwards from end to beginning to compute x vector
+        xVec[0, n]
+        
+
+    # Use built-in matrix solver and scipy LU function to test
     U[1:-1, i+1] = (inv(A)@b).transpose()  # Use built-in transpose operator
     p_ans, lo_ans, up_ans = scipy.linalg.lu(A)  # Use built-in LU decomposition
 
