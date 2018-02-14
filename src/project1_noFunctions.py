@@ -26,8 +26,8 @@ import scipy.linalg
 import matplotlib.pyplot as plt
 
 # Initialize uniform grid
-Nx = 41  # number of nodes in x-direction
-Ny = 41  # number of nodes in y-direction
+Nx = 101  # number of nodes in x-direction
+Ny = 21  # number of nodes in y-direction
 
 # Make linear-spaced 1D array of x-values from 0 to 1 with Nx elements
 x = np.linspace(0, 1, Nx)
@@ -170,7 +170,8 @@ for i in range(len(x)-1):
 
 
 # Create contour plot of U vs x and y
-plt.figure(figsize=(6, 4))
+plt.figure(num=0, dpi=120)
+# plt.figure(num=0, figsize=(6, 4))
 plt.contourf(x, y, U, cmap='plasma', levels=np.linspace(0., 1., 11))
 cbar = plt.colorbar()
 fs = 17  # Define font size for figures
@@ -194,7 +195,7 @@ lines = ['y-', 'r-.', 'm--', 'b:', 'k-']
 legStr = []
 for n in range(len(xLocs)):
     col = np.argmin(abs(x-xLocs[n]))  # extract value closest to given xLoc
-    plt.figure(num=0)  # create figure numbered for this loop number
+    plt.figure(num=1, figsize=(6, 4))  # create figure numbered "1"
     plt.plot(U[:, col], y, lines[n])
     legStr.append('x = {}'.format(xLocs[n]))
 

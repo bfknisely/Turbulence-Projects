@@ -65,8 +65,9 @@ def pentaLU(A, b):  # Define LU Decomposition function to solve A*x = b for x
     lo[-1, -3] = A[-1, -3]/up[-3, -3]
     lo[-1, -2] = (A[-1, -2] - lo[-1, -3]*up[-3, -2])/up[-2, -2]
     up[-1, -1] = A[-1, -1] - lo[-1, -3]*up[-3, -1] - lo[-1, -2]*up[-2, -1]
+    # LU Decomposition is complete at this point
 
-    # Solve for y vector in lo*yVec = b by forward substitution
+    # Now solve for y vector in lo*yVec = b by forward substitution
     yVec[0, 0] = b[0]  # Calculate 0th element of y vector
     yVec[0, 1] = b[1] - lo[1, 0]*yVec[0, 0]  # Compute 1st element of y vector
     for n in range(2, np.shape(yVec)[1]):
@@ -199,7 +200,8 @@ def makePlots(U):  # Display results spatially
 
     # Create contour plot of U vs x and y
     plt.figure(figsize=(6, 4))
-    plt.contourf(x, y, U, cmap='plasma', levels=np.linspace(0., 1., 11))
+    plt.contourf(x, y, U, cmap='plasma')
+    #plt.contourf(x, y, U, cmap='plasma', levels=np.linspace(0., 1., 11))
     cbar = plt.colorbar()
     fs = 17  # Define font size for figures
     fn = 'Calibri'  # Define font for figures
@@ -236,7 +238,7 @@ def makePlots(U):  # Display results spatially
 
 # Run functions in order
 t0 = time.time()
-U = main(101, 101, 'inv')
+U = main(21, 21, 'lu')
 elapsed = time.time() - t0
 print('Elapsed time is ' + '{0:0.4}'.format(elapsed) + ' s.')
 makePlots(U)
