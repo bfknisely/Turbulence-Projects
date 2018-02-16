@@ -26,7 +26,7 @@ import time
 
 
 def analytic(Nx, Ny):  # Define function to output analytic solution
-    import math
+    from math import sin, exp, pi
 
     # Make linear-spaced 1D array of x-values from 0 to 1 with Nx elements
     x = np.linspace(0, 1, Nx)
@@ -38,11 +38,12 @@ def analytic(Nx, Ny):  # Define function to output analytic solution
     # of dimension [Nx columns] by [Ny rows]
     u = np.zeros([Ny, Nx])
 
-    n = 10  # choose first solution of infinitely many solutions
+    n = 1  # choose first solution of infinitely many solutions
 
     for i in range(len(x)):
         for j in range(len(y)):
-            u[j, i] = -y[j]**3/6 + 7*y[j]/3 + math.exp(-(n*math.pi)**2 * x[i])
+            u[j, i] = (-y[j]**3/6 + 7*y[j]/3 + (sin(n*pi*y[j])/y[j] *
+                       sin(n*pi*y[j]) * exp(-(n*pi)**2 * x[i])))
 
     return u
 
@@ -267,4 +268,4 @@ u_an = analytic(Nx, Ny)
 elapsed = time.time() - t0
 print('Elapsed time is ' + '{0:0.4}'.format(elapsed) + ' s.')
 makePlots(U)
-makePlots(u)
+makePlots(u_an)
