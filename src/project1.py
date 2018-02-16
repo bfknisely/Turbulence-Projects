@@ -25,6 +25,28 @@ import matplotlib.pyplot as plt
 import time
 
 
+def analytic(Nx, Ny):  # Define function to output analytic solution
+    import math
+
+    # Make linear-spaced 1D array of x-values from 0 to 1 with Nx elements
+    x = np.linspace(0, 1, Nx)
+
+    # Make linear-spaced 1D array of y-values from 0 to 1 with Ny elements
+    y = np.linspace(0, 1, Ny)
+
+    # Initialize solution as 2D array of zeros
+    # of dimension [Nx columns] by [Ny rows]
+    u = np.zeros([Ny, Nx])
+
+    n = 10  # choose first solution of infinitely many solutions
+
+    for i in range(len(x)):
+        for j in range(len(y)):
+            u[j, i] = -y[j]**3/6 + 7*y[j]/3 + math.exp(-(n*math.pi)**2 * x[i])
+
+    return u
+
+
 def pentaLU(A, b):  # Define LU Decomposition function to solve A*x = b for x
     """
     Function to solve A*x = b for a given a pentadiagonal 2D array A and right-
@@ -200,8 +222,8 @@ def makePlots(U):  # Display results spatially
 
     # Create contour plot of U vs x and y
     plt.figure(figsize=(6, 4))
+    # plt.contourf(x, y, U, cmap='plasma', levels=np.linspace(0., 1., 11))
     plt.contourf(x, y, U, cmap='plasma')
-    #plt.contourf(x, y, U, cmap='plasma', levels=np.linspace(0., 1., 11))
     cbar = plt.colorbar()
     fs = 17  # Define font size for figures
     fn = 'Calibri'  # Define font for figures
@@ -238,7 +260,11 @@ def makePlots(U):  # Display results spatially
 
 # Run functions in order
 t0 = time.time()
-U = main(21, 21, 'lu')
+Nx = 21
+Ny = 41
+U = main(Nx, Ny, 'lu')
+u_an = analytic(Nx, Ny)
 elapsed = time.time() - t0
 print('Elapsed time is ' + '{0:0.4}'.format(elapsed) + ' s.')
 makePlots(U)
+makePlots(u)
