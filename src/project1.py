@@ -20,7 +20,6 @@ a uniform grid and central differencing scheme that is fourth-order in y.
 # Import packages for arrays and plotting
 import numpy as np
 from numpy.linalg import inv
-import scipy.linalg
 import matplotlib.pyplot as plt
 import time
 
@@ -38,13 +37,16 @@ def analytic(Nx, Ny):  # Define function to output analytic solution
     # of dimension [Nx columns] by [Ny rows]
     u = np.zeros([Ny, Nx])
 
-    n = 1  # choose first solution of infinitely many solutions
+    nTerms = 1  # choose number of terms for infinite sum in solution
 
     for i in range(len(x)):
         for j in range(len(y)):
-            u[j, i] = (-y[j]**3/6 + 7*y[j]/3 + (sin(n*pi*y[j])/y[j] *
-                       sin(n*pi*y[j]) * exp(-(n*pi)**2 * x[i])))
-
+            v = 0
+            for n in range(1, nTerms+1):
+                Bn = -2/(n*pi)**3
+                v += Bn * sin(n*pi*y[j]) * exp(-(n*pi)**2*x[i])
+            U = -y[j]**3/6 + 7*y[j]/6
+            u[j, i] = U + v
     return u
 
 
@@ -223,8 +225,8 @@ def makePlots(U):  # Display results spatially
 
     # Create contour plot of U vs x and y
     plt.figure(figsize=(6, 4))
-    # plt.contourf(x, y, U, cmap='plasma', levels=np.linspace(0., 1., 11))
-    plt.contourf(x, y, U, cmap='plasma')
+    plt.contourf(x, y, U, cmap='plasma', levels=np.linspace(0., 1., 11))
+    # plt.contourf(x, y, U, cmap='plasma')
     cbar = plt.colorbar()
     fs = 17  # Define font size for figures
     fn = 'Calibri'  # Define font for figures
@@ -245,9 +247,9 @@ def makePlots(U):  # Display results spatially
     # Loop for each x-location to make plots at each location comparing exact
     # solution with analytical solution
     legStr = []
+    plt.figure()  # create new figure
     for n in range(len(xLocs)):
         col = np.argmin(abs(x-xLocs[n]))  # extract value closest to given xLoc
-        plt.figure(num=0)  # create figure numbered for this loop number
         plt.plot(U[:, col], y, lines[n])
         legStr.append('x = {}'.format(xLocs[n]))
 
