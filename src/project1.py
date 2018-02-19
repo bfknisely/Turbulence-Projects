@@ -240,6 +240,9 @@ def makePlots(u):  # Display results spatially
     cbar.ax.set_yticklabels([round(cbar.get_ticks()[n], 2)
                             for n in range(len(cbar.get_ticks()))],
                             fontsize=fs-2, fontname=fn, weight='bold')
+    # plt.savefig("contour"+str(Nx)+'_'+str(Ny)+".png", dpi=320,
+    #            bbox_inches='tight')
+    plt.close()
 
     # Look at solution at selected x-locations
     xLocs = [0.05, 0.1, 0.2, 0.5, 1.0]
@@ -259,6 +262,9 @@ def makePlots(u):  # Display results spatially
                fontweight='bold')
     plt.xticks(fontsize=fs-2, fontname=fn, fontweight='bold')
     plt.yticks(fontsize=fs-2, fontname=fn, fontweight='bold')
+    # plt.savefig("curves"+str(Nx)+'_'+str(Ny)+".png", dpi=320,
+    #            bbox_inches='tight')
+    plt.close()
 
 
 def errorPlots(u, u_an):
@@ -277,6 +283,7 @@ def errorPlots(u, u_an):
     cbar = plt.colorbar()
     fs = 17  # Define font size for figures
     fn = 'Calibri'  # Define font for figures
+    # Label axes and set tick styles
     plt.xlabel('x', fontsize=fs, fontname=fn, fontweight='bold')
     plt.ylabel('y' + '     ', fontsize=fs, rotation=0, fontname=fn,
                fontweight='bold')
@@ -284,11 +291,12 @@ def errorPlots(u, u_an):
     plt.yticks(fontsize=fs-2, fontname=fn, fontweight='bold')
     cbar.ax.set_ylabel('                   |${u-u_{an}}$|', rotation=0,
                        fontname=fn, fontsize=fs, weight='bold')
-    #    cbar.ax.set_yticklabels(cbar.get_ticks(),
-    #                            fontsize=fs-2, fontname=fn, weight='bold')
     cbar.ax.set_yticklabels([round(cbar.get_ticks()[n], 4)
                             for n in range(len(cbar.get_ticks()))],
                             fontsize=fs-2, fontname=fn, weight='bold')
+    # plt.savefig("err_contour"+str(Nx)+'_'+str(Ny)+".png", dpi=320,
+    #            bbox_inches='tight')
+
 
     # Look at error in solution at selected x-locations
     xLocs = [0.05, 0.1, 0.2, 0.5, 1.0]
@@ -308,6 +316,9 @@ def errorPlots(u, u_an):
                fontweight='bold')
     plt.xticks(fontsize=fs-2, fontname=fn, fontweight='bold')
     plt.yticks(fontsize=fs-2, fontname=fn, fontweight='bold')
+    # plt.savefig("err_curves"+str(Nx)+'_'+str(Ny)+".png", dpi=320,
+    #           bbox_inches='tight')
+    plt.close()
 
 
 # Run functions in order
@@ -316,7 +327,79 @@ Nx = 21
 Ny = 21
 u = main(Nx, Ny, 'lu')
 u_an = analytic(Nx, Ny)
-makePlots(u)
-errorPlots(u, u_an)
+#makePlots(u)
+#errorPlots(u, u_an)
 elapsed = time.time() - t0
-print('Elapsed time is ' + '{0:0.4}'.format(elapsed) + ' s.')
+#    print('dx = {0:0.6}'.format(1/(Nx-1)))
+#    print('Max error in u is {0:0.6}'.format(np.amax(abs(u-u_an))))
+#    print('Elapsed time is {0:0.4}'.format(elapsed) + ' s.')
+print('{0:0.6}'.format(1/(Ny-1)))
+print('{0:0.6}'.format(np.amax(abs(u-u_an))))
+print('{0:0.6}'.format(elapsed))
+
+
+# Data collected on variation of dx values (with dy constant at 0.05)
+dxes = [0.05, 0.04, 0.0333333, 0.025, 0.02, 0.0166667, 0.0125, 0.01, 0.005,
+        0.0025, 0.00166667, 0.001]  # dx values themselves
+dxerrs = [0.00276807, 0.00222227, 0.00183598, 0.00132455, 0.00101785,
+          0.000861093, 0.000647488, 0.000507671, 0.00019631, 3.41267e-05,
+          1.97199e-05, 3.37169e-05]  # maximum error in u
+dxt = [0.3222, 0.343764, 0.406265, 0.406255, 0.499992, 0.499991, 0.609383,
+       0.671899, 0.843771, 1.70315, 2.55095, 4.21325]  # computation time
+
+# Create plot to show effects of dx on error and computation time
+plt.figure()
+plt.plot(dxes, dxerrs, 'k', dxes, dxt, 'b')
+fs = 17  # Define font size for figures
+fn = 'Calibri'  # Define font for figures
+# Label axes and set tick styles
+plt.xlabel('$\Delta$ x', fontsize=fs, fontname=fn, fontweight='bold')
+# plt.ylabel('y' + '     ', fontsize=fs, rotation=0, fontname=fn,
+#            fontweight='bold')
+plt.xticks(fontsize=fs-2, fontname=fn, fontweight='bold')
+plt.yticks(fontsize=fs-2, fontname=fn, fontweight='bold')
+plt.legend(['Absolute error in u', 'Computation time [s]'])
+
+# Data collected on variation of dy values (with dx constant at 0.05)
+dyes = [0.05, 0.04, 0.0333333, 0.025, 0.02, 0.0166667, 0.0125, 0.01, 0.005,
+        0.0025, 0.00166667, 0.001]  # dy values themselves
+dyerrs = [0.00276807, 0.00278632, 0.00278221, 0.00278486, 0.00279274,
+          0.00279906, 0.002803, 0.00280316, 0.00280319, 0.00280319, 0.0028033,
+          0.00280335]  # maximum error in u
+dyt = [0.0937653, 0.109376, 0.140636, 0.171877, 0.218763, 0.265623, 0.34375,
+       0.425119, 0.859382, 1.73438, 2.61386, 4.33241]  # computation time
+
+# Create plot to show effects of dy on error and computation time
+plt.figure()
+plt.plot(dyes, dyerrs, 'k', dyes, dyt, 'b')
+fs = 17  # Define font size for figures
+fn = 'Calibri'  # Define font for figures
+# Label axes and set tick styles
+plt.xlabel('$\Delta$ y', fontsize=fs, fontname=fn, fontweight='bold')
+# plt.ylabel('y' + '     ', fontsize=fs, rotation=0, fontname=fn,
+#            fontweight='bold')
+plt.xticks(fontsize=fs-2, fontname=fn, fontweight='bold')
+plt.yticks(fontsize=fs-2, fontname=fn, fontweight='bold')
+plt.legend(['Absolute error in u', 'Computation time [s]'])
+
+# Data collected on varying both dx and dy together
+dxdyes = [0.05, 0.04, 0.0333333, 0.025, 0.02, 0.0166667, 0.0125, 0.01, 0.005,
+        0.0025, 0.00166667, 0.001]  # dx and dy values themselves
+dxdyerrs = [0.00276807, 0.00218433, 0.00185296, 0.00139747, 0.00110844,
+            0.000932838, 0.00069616, 0.000560447, 0.000280287, 0.000140149,
+            9.34256e-05, 5.60506e-05]
+dxdyt = [0.0937514, 0.140621, 0.187512, 0.343739, 0.536466, 0.75001, 1.34378,
+         2.09376, 8.223, 32.7938, 77.9015, 207.268]
+
+# Create plot to show effects of dy on error and computation time
+plt.figure()
+plt.plot(dxdyes, dxdyerrs, 'k', dxdyes, dxdyt, 'b')
+fs = 17  # Define font size for figures
+fn = 'Calibri'  # Define font for figures
+# Label axes and set tick styles
+plt.xlabel('$\Delta$ x = $\Delta$ y', fontsize=fs, fontname=fn, fontweight='bold')
+# plt.ylabel('y' + '     ', fontsize=fs, rotation=0, fontname=fn,
+#            fontweight='bold')
+plt.xticks(fontsize=fs-2, fontname=fn, fontweight='bold')
+plt.yticks(fontsize=fs-2, fontname=fn, fontweight='bold')
+plt.legend(['Absolute error in u', 'Computation time [s]'])
