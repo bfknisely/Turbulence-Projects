@@ -131,6 +131,7 @@ def main(Nx, Ny, method):  # Define main function to set up grid and A matrix
     #                and march in x-direction using Crank-Nicolson algorithm
     #       Inputs:  Nx = number of nodes in x-direction
     #                Ny = number of nodes in y-direction
+    #                method = "lu" or "inv" for matrix inversion
 
     # Initialize uniform grid
     # Nx = 21  # number of nodes in x-direction
