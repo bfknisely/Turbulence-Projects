@@ -9,7 +9,7 @@ Computer Project Number 1
 The purpose of this code is to use finite difference to solve a parabolic
 partial differential equation.
 
-The PDE is (all partial derivatives): du/dx - d^2(u)/dy^2 = y
+The PDE is: ∂u/∂x - ∂^2(u)/∂y^2 = y
 
 Subject to the following boundary conditions (BCs):
     u(x, 0) = 0
@@ -29,15 +29,12 @@ import numpy as np
 from numpy.linalg import inv
 import matplotlib.pyplot as plt
 import time
-
+import os
 
 def analytic(Nx, Ny):  # Define function to output analytic solution
     """
-    This function solves this PDE (all derivatives are partial): 
-    
-    du/dx - d^2(u)/dy^2 = y 
-    
-    using the Fourier sine series solution with N = 100 summation terms.
+    This function solves the PDE ∂u/∂x - ∂^2(u)/∂y^2 = y analytically using
+    the closed-form Fourier sine series solution with N = 100 summation terms.
     """
     # Import functions as necessary
     from math import sin, exp, pi
@@ -58,7 +55,7 @@ def analytic(Nx, Ny):  # Define function to output analytic solution
     for i in range(len(x)):  # loop over all x values
         for j in range(len(y)):  # loop over all y values
             v = 0  # set v function to zero initially
-            for n in range(1, nTerms+1):  # loop over all eigvalues from 1 to N
+            for n in range(1, nTerms+1):  # loop over all eigvalues from 0 to N
                 # calculate the Bn for the nth eigenvalue
                 Bn = 2*(-1)**n / (n*pi)**3
                 # add terms to v one at a time
@@ -134,7 +131,10 @@ def main(Nx, Ny, method):  # Define main function to set up grid and A matrix
     #                and march in x-direction using Crank-Nicolson algorithm
     #       Inputs:  Nx = number of nodes in x-direction
     #                Ny = number of nodes in y-direction
-    #                method = choose 'lu' or 'inv' matrix inversion
+
+    # Initialize uniform grid
+    # Nx = 21  # number of nodes in x-direction
+    # Ny = 21  # number of nodes in y-direction
 
     # Make linear-spaced 1D array of x-values from 0 to 1 with Nx elements
     x = np.linspace(0, 1, Nx)
@@ -142,7 +142,7 @@ def main(Nx, Ny, method):  # Define main function to set up grid and A matrix
     # Make linear-spaced 1D array of y-values from 0 to 1 with Ny elements
     y = np.linspace(0, 1, Ny)
 
-    # Calculate spacings dx and dy; these are constant with the uniform grid
+    # Calculate spacings Δx and Δy; these are constant with the uniform grid
     dx = x[1] - x[0]
     dy = y[1] - y[0]
 
@@ -256,9 +256,9 @@ def makePlots(u):  # Display results spatially
     cbar.ax.set_yticklabels([round(cbar.get_ticks()[n], 2)
                             for n in range(len(cbar.get_ticks()))],
                             fontsize=fs-2, fontname=fn, weight='bold')
-    # plt.savefig("contour"+str(Nx)+'_'+str(Ny)+".png", dpi=320,
-    #             bbox_inches='tight')  # save figure
-    # plt.close()  # close figure
+    plt.savefig(os.getcwd()+"\\figures\\contour"+str(Nx)+'_'+str(Ny)+".png",
+                dpi=320, bbox_inches='tight')  # save figure
+    plt.close()  # close figure
 
     # Look at solution at selected x-locations
     xLocs = [0.05, 0.1, 0.2, 0.5, 1.0]
@@ -277,9 +277,9 @@ def makePlots(u):  # Display results spatially
                fontweight='bold')
     plt.xticks(fontsize=fs-2, fontname=fn, fontweight='bold')
     plt.yticks(fontsize=fs-2, fontname=fn, fontweight='bold')
-    # plt.savefig("curves"+str(Nx)+'_'+str(Ny)+".png", dpi=320,
-    #             bbox_inches='tight')  # save figure
-    # plt.close()  # close figure
+    plt.savefig(os.getcwd()+"\\figures\\curves"+str(Nx)+'_'+str(Ny)+".png",
+                dpi=320, bbox_inches='tight')  # save figure
+    plt.close()  # close figure
     # End of makePlots function
 
 
@@ -310,9 +310,9 @@ def errorPlots(u, u_an):  # function to plot error in u vs u_an
     cbar.ax.set_yticklabels([round(cbar.get_ticks()[n], 4)
                             for n in range(len(cbar.get_ticks()))],
                             fontsize=fs-2, fontname=fn, weight='bold')
-    # plt.savefig("err_contour"+str(Nx)+'_'+str(Ny)+".png", dpi=320,
-    #             bbox_inches='tight')  # save figure
-    # plt.close()  # close figure
+    plt.savefig(os.getcwd()+"\\figures\\err_contour"+str(Nx)+'_'+str(Ny)+".png",
+                dpi=320, bbox_inches='tight')  # save figure
+    plt.close()  # close figure
 
     # Look at error in solution at selected x-locations
     xLocs = [0.05, 0.1, 0.2, 0.5, 1.0]
@@ -325,16 +325,15 @@ def errorPlots(u, u_an):  # function to plot error in u vs u_an
         col = np.argmin(abs(x-xLocs[n]))  # extract value closest to given xLoc
         plt.plot(abs(u[:, col]-u_an[:, col]), y, lines[n])
         legStr.append('x = {}'.format(xLocs[n]))
-
     plt.legend(legStr, fontsize=fs-2)
     plt.xlabel('|${u-u_{an}}$|', fontsize=fs, fontname=fn, fontweight='bold')
     plt.ylabel('y' + '     ', fontsize=fs, rotation=0, fontname=fn,
                fontweight='bold')
     plt.xticks(fontsize=fs-2, fontname=fn, fontweight='bold')
     plt.yticks(fontsize=fs-2, fontname=fn, fontweight='bold')
-    # plt.savefig("err_curves"+str(Nx)+'_'+str(Ny)+".png", dpi=320,
-    #             bbox_inches='tight')  # save figure
-    # plt.close()  # close figure
+    plt.savefig(os.getcwd()+"\\figures\\err_curves"+str(Nx)+'_'+str(Ny)+".png",
+                dpi=320, bbox_inches='tight')  # save figure
+    plt.close()  # close figure
     # End of errorPlots function
 
 
@@ -360,7 +359,9 @@ def plotDxDyEffects():  # function to plot effects of dx and dy spacings
     plt.xticks(fontsize=fs-2, fontname=fn, fontweight='bold')
     plt.yticks(fontsize=fs-2, fontname=fn, fontweight='bold')
     plt.legend(['Absolute error in u', 'Computation time [s]'])
-    # plt.savefig("dxEffect.png", dpi=320, bbox_inches='tight')
+    plt.savefig(os.getcwd()+"\\figures\\dxEffect.png", dpi=320,
+                bbox_inches='tight')
+    plt.close()  # close figure
 
     # Data collected on variation of dy values (with dx constant at 0.05)
     # dy values themselves
@@ -383,7 +384,9 @@ def plotDxDyEffects():  # function to plot effects of dx and dy spacings
     plt.xticks(fontsize=fs-2, fontname=fn, fontweight='bold')
     plt.yticks(fontsize=fs-2, fontname=fn, fontweight='bold')
     plt.legend(['Absolute error in u', 'Computation time [s]'])
-    # plt.savefig("dyEffect.png", dpi=320, bbox_inches='tight')
+    plt.savefig(os.getcwd()+"\\figures\\dyEffect.png", dpi=320,
+                bbox_inches='tight')
+    plt.close()  # close figure
 
     # Data collected on varying both dx and dy together
     dxdyes = [0.05, 0.04, 0.0333333, 0.025, 0.02, 0.0166667, 0.0125, 0.01,
@@ -403,7 +406,9 @@ def plotDxDyEffects():  # function to plot effects of dx and dy spacings
     plt.xticks(fontsize=fs-2, fontname=fn, fontweight='bold')
     plt.yticks(fontsize=fs-2, fontname=fn, fontweight='bold')
     plt.legend(['Absolute error in u', 'Computation time [s]'])
-    # plt.savefig("dxdyEffect.png", dpi=320, bbox_inches='tight')  # save fig
+    plt.savefig(os.getcwd()+"\\figures\\dxdyEffect.png", dpi=320,
+                bbox_inches='tight')
+    plt.close()
     # End of plotDxDyEffects function
 
 
