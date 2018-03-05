@@ -20,8 +20,6 @@ The Crank-Nicolson Algorithm is to be used to march in the x-direction, using
 a uniform grid and central differencing scheme that is fourth-order in y. An LU
 decompsition algorithm is used to solve the pentadiagonal matrix for u-values
 at each x-step.
-
-Developed in Spyder 3.2.6 for Windows
 """
 
 # Import packages for arrays, plotting, and timing
@@ -30,6 +28,11 @@ from numpy.linalg import inv
 import matplotlib.pyplot as plt
 import time
 import os
+
+
+def blasius(Nx, Ny):  # Define function to calculate Blasius BL solution
+    
+
 
 def analytic(Nx, Ny):  # Define function to output analytic solution
     """
