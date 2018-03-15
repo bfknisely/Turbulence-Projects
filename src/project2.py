@@ -4,25 +4,48 @@ Mon, Feb 19, 2018
 @author: Brian F. Knisely
 
 AERSP/ME 525: Turbulence and Applications to CFD: RANS
-Computer Project Number 1
+Computer Project Number 2
 
-The purpose of this code is to use finite difference to solve a parabolic
-partial differential equation.
+The purpose of this code is to use finite difference to solve the laminar
+boundary layer equations for a 2D flat plate and compare to the Blasius
+solution.
 
-The PDE is: ∂u/∂x - ∂^2(u)/∂y^2 = y
+The PDEs with dimensional variables (denoted with ~) are:
+    du~/dx~ + dv~/dy~ = 0
+    u~ du~/dx~ + v~ du~/dy~ = d/dy~(nu~ du~/dy~)
 
-Subject to the following boundary conditions (BCs):
-    u(x, 0) = 0
-    u(x, 1) = 1
-    u(0, y) = y
+Note: all derivatives are partial derivatives
+
+The equations are nondimensionalized with:
+    x = x~/L~
+    y = y~/delta~
+    u = u~/Uinf~
+    v = v~L~/(Uinf~delta~)
+    nu = nu~/nu_inf~
+    RD = L~nu_inf~/(Uinf~(delta~)^2)
+
+The resulting nondimensional equations are:
+    du/dx + dv/dy = 0
+    u du/dx + v du/dy = 1/RD d/dy(nu du/dy)
+
+Again all derivatives are partial derivatives
+
+The boundary conditions (BCs) in nondimensional form are:
+    u(x, 0) = 0  (no-slip condition)
+    u(x, yMax) = 1  (velocity is equal to freestream at top edge of domain)
+    u(0, y <= 1) = sin(pi*y/2)  (starting profile)
+    u(0, y > 1) = 1  (starting profile)
+    v(x, 0) = 0  (impermeable wall condition)
+    v(x, yMax) = 0  (freestream is purely in x-direction, no y-component)
 
 The Crank-Nicolson Algorithm is to be used to march in the x-direction, using
 a uniform grid and central differencing scheme that is fourth-order in y. An LU
 decompsition algorithm is used to solve the pentadiagonal matrix for u-values
-at each x-step.
+at each x-step. After computing the u-values, the continuity equation is solved
+for the v-values at that step.
 """
 
-# Import packages for arrays, plotting, and timing
+# Import packages for arrays, plotting, timing, and file I/O
 import numpy as np
 from numpy.linalg import inv
 import matplotlib.pyplot as plt
@@ -31,42 +54,7 @@ import os
 
 
 def blasius(Nx, Ny):  # Define function to calculate Blasius BL solution
-    
-
-
-def analytic(Nx, Ny):  # Define function to output analytic solution
-    """
-    This function solves the PDE ∂u/∂x - ∂^2(u)/∂y^2 = y analytically using
-    the closed-form Fourier sine series solution with N = 100 summation terms.
-    """
-    # Import functions as necessary
-    from math import sin, exp, pi
-
-    # Make linear-spaced 1D array of x-values from 0 to 1 with Nx elements
-    x = np.linspace(0, 1, Nx)
-
-    # Make linear-spaced 1D array of y-values from 0 to 1 with Ny elements
-    y = np.linspace(0, 1, Ny)
-
-    # Initialize solution as 2D array of zeros
-    # of dimension [Nx columns] by [Ny rows]
-    u = np.zeros([Ny, Nx])
-
-    nTerms = 100  # choose number of terms for finite sum in solution
-
-    # Loop to solve for u at each (x, y) location
-    for i in range(len(x)):  # loop over all x values
-        for j in range(len(y)):  # loop over all y values
-            v = 0  # set v function to zero initially
-            for n in range(1, nTerms+1):  # loop over all eigvalues from 0 to N
-                # calculate the Bn for the nth eigenvalue
-                Bn = 2*(-1)**n / (n*pi)**3
-                # add terms to v one at a time
-                v = v + Bn * sin(n*pi*y[j]) * exp(-(n*pi)**2*x[i])
-            U = -y[j]**3/6 + 7*y[j]/6  # solution to U(y)
-            # Store result in the jth row, ith column
-            u[j, i] = U + v  # Add solutions of U and v together to get u(x, y)
-    return u
+    print('Blasius')
 
 
 def pentaLU(A, b):  # Define LU Decomposition function to solve A*x = b for x
@@ -136,15 +124,13 @@ def main(Nx, Ny, method):  # Define main function to set up grid and A matrix
     #                Ny = number of nodes in y-direction
     #                method = "lu" or "inv" for matrix inversion
 
-    # Initialize uniform grid
-    # Nx = 21  # number of nodes in x-direction
-    # Ny = 21  # number of nodes in y-direction
+    yMax = 10
 
     # Make linear-spaced 1D array of x-values from 0 to 1 with Nx elements
     x = np.linspace(0, 1, Nx)
 
     # Make linear-spaced 1D array of y-values from 0 to 1 with Ny elements
-    y = np.linspace(0, 1, Ny)
+    y = np.linspace(0, yMax, Ny)
 
     # Calculate spacings Δx and Δy; these are constant with the uniform grid
     dx = x[1] - x[0]
