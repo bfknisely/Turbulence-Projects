@@ -143,7 +143,7 @@ def main(Nx, Ny, method):  # Define main function to set up grid and A matrix
     # Make linear-spaced 1D array of y-values from 0 to 1 with Ny elements
     y = np.linspace(0, 1, Ny)
 
-    # Calculate spacings Δx and Δy; these are constant with the uniform grid
+    # Calculate spacings dx and dy; these are constant with the uniform grid
     dx = x[1] - x[0]
     dy = y[1] - y[0]
 
