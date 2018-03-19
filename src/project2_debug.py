@@ -23,7 +23,7 @@ The boundary conditions (BCs) in nondimensional form are:
 import numpy as np
 from numpy.linalg import inv
 import matplotlib.pyplot as plt
-from math import sin, pi
+from math import sin, pi, sinh, cosh, asinh
 
 
 def pentaLU(A, b):  # Define LU Decomposition function to solve A*x = b for x
@@ -92,30 +92,55 @@ def pentaLU(A, b):  # Define LU Decomposition function to solve A*x = b for x
 #       Inputs:  Nx = number of nodes in x-direction
 #                Ny = number of nodes in y-direction
 #                method = "lu" or "inv" for matrix inversion
+#                s = stretching factor
 Nx = 41
-Ny = 41
+Ny = 151
 method = 'lu'
+s = 5
 
-yMax = 5
+# Define given dimensional quantities
+nuInfDim = 1.5e-6  # Dimensional freestream viscosity in m^2/s
+uInfDim = 40  # Dimensional freestream velocity in m/s
+LDim = 0.5  # Length of plate in m
+deltaDim = 0.005  # Initial BL thickness in m
+
+# Calculate derived nondimensional quantity
+RD = uInfDim*deltaDim**2/(LDim*nuInfDim)
+nu = 1  # Assume viscosity in BL is equal to freestream viscosity
 
 # Make linear-spaced 1D array of x-values from 0 to 1 with Nx elements
 x = np.linspace(0, 1, Nx)
 
-# Make linear-spaced 1D array of y-values from 0 to 1 with Ny elements
-y = np.linspace(0, yMax, Ny)
+# Make linear-spaced 1D array of eta-values from 0 to 1 with Ny elements
+eta = np.linspace(0, 1, Ny)
 
-# Calculate spacings Δx and Δy; these are constant with the uniform grid
+# Define bounds of computational domain
+xMax = 40
+yMax = 10
+
+
+# %% Compute values of y based on eta and ymax
+y = [yMax*sinh(s*et)/sinh(s) for et in eta]
+
+# Evaluate values of fPrime and fDoublePrime
+fPrime = [s*yMax*cosh(s*et)/sinh(s) for et in eta]
+fDoublePrime = [s**2*yMax*sinh(s*et)/sinh(s) for et in eta]
+# Determine etaY and etaYY
+etaY = [1/fP for fP in fPrime]
+etaYY = [-fDoublePrime[n]/(fPrime[n]**3) for n in range(len(fPrime))]
+
+# Calculate spacings dx and de; these are constant with the uniform x-eta grid
 dx = x[1] - x[0]
-dy = y[1] - y[0]
+de = eta[1] - eta[0]
 
 # Initialize u- and v-arrays: 2D arrays of zeros
 # of dimension [Nx columns] by [Ny rows]
 u = np.zeros([Ny, Nx])
 v = np.zeros([Ny, Nx])
 # u is a 2D array of nondimensional x-velocities at all spatial locations
-# u is a 2D array of nondimensional y-velocities at all spatial locations
+# v is a 2D array of nondimensional y-velocities at all spatial locations
 
-# Apply boundary conditions to u matrix
+# %% Apply boundary conditions to u matrix
 
 # Set u(x, 0) to be 0 from no-slip boundary condition
 u[0, :] = 0  # Set 0th row, all columns to be 0
@@ -123,24 +148,24 @@ u[0, :] = 0  # Set 0th row, all columns to be 0
 # Set u(x, 1) to be 1 from Dirichlet boundary condition
 u[-1, :] = 1  # Set last row, all columns to be 1
 
-# Set u(0, y) to starting profile
+# Set u(0, eta) to starting profile
+etaY1 = asinh(1*sinh(s)/yMax)/s  # Determine eta value corresponding to y = 1
 for n in range(len(y)):
     # u(0, y <= 1) = sin(pi*y/2)
-    if y[n] <= 1:
-        u[n, 0] = sin(pi*y[n]/2)
+    if eta[n] <= etaY1:
+        u[n, 0] = sin(pi*yMax*sinh(s*eta[n])/sinh(s)/2)
     # u(0, y > 1) = 1
-    elif y[n] > 1:
+    elif y[n] > etaY1:
         u[n, 0] = 1
 
-# Apply boundary conditions to v matrix
-
-# Set v(x, 0) to be 0 from impermeable wall condition
+# %% Apply boundary conditions to v matrix
+# Set v(x, eta=0) to be 0 from impermeable wall condition
 v[0, :] = 0
 
-# Set v(x, yMax) to be 0 due to upper freestream condition
+# Set v(x, eta=1) to be 0 due to upper freestream condition
 v[-1, :] = 0
 
-
+# %% Loop over each x-step
 for i in range(len(x)-1):
 
     # Set up matrix and RHS "b" matrix (knowns)
@@ -152,69 +177,183 @@ for i in range(len(x)-1):
     # Y-dimension reduced by two because u(x, 0) and u(x, 1)
     # are known already
 
-    # # # Use 2nd-Order-Accurate scheme for first interior nodes
+    # %% Use 2nd-Order-Accurate scheme for first interior nodes
 
-    # at j = 1 (near bottom border of domain)
-    A[0, 0] = 1/dx + 1/dy**2  # Assign value in matrix location [1, 1]
-    A[0, 1] = -1/(2*dy**2)  # Assign value in matrix location [1, 2]
+    # at j = 2 (near bottom border of domain)
+    # Calculate values of A(eta) and B(eta) at j = 2
+    Ae = v[1, i]*etaY[1] - nu*etaY[1]*etaYY[1]/RD
+    Be = -nu*etaY[1]**2/RD
+
+    # Populate coefficient matrix
+    A[0, 0] = u[1, i]/dx - Be/de**2  # Assign value in matrix location [1, 1]
+    A[0, 1] = Ae/(4*de) + Be/(2*de**2)  # Assign value in matrix location
+    #                                     [1, 2]
 
     # Assign right-hand side of equation (known values) for 0th value in b
-    b[0] = (y[1] + 1/(2*dy**2)*u[0, i] + (-1/dy**2 + 1/dx)*u[1, i]
-            + 1/(2*dy**2)*u[2, i] + 1/(2*dy**2)*u[0, i+1])
+    b[0] = (u[0, i]*(Ae/(4*de) - Be/(2*de**2)) + u[1, i]*Be/de**2
+            + u[1, i]**2/dx + u[2, i]*(-Ae/(4*de) - Be/(2*de**2))
+            + u[0, i+1]*(Ae/(4*de) - Be/(2*de**2)))
 
-    # at j = Ny-2 (near top border of domain)
-    A[-1, -1] = 1/dx + 1/dy**2  # Assign value to last diagonal element
-    A[-1, -2] = -1/(2*dy**2)  # Assign value to left of last diag element
+    # at j = Ny-1 (near top border of domain)
+    # Calculate values of A(eta) and B(eta) at j = Ny-1
+    Ae = v[-2, i]*etaY[-2] - nu*etaY[-2]*etaYY[-2]/RD
+    Be = -nu*etaY[-2]**2/RD
+
+    # Populate coefficient matrix
+    A[-1, -1] = u[-2, i]/dx - Be/de**2  # Assign value to last diagonal element
+    A[-1, -2] = -Ae/(4*de) + Be/(2*de**2)  # Assign value to left of last diag
 
     # Assign right-hand side of equation (known values) for last value in b
-    b[-1] = (y[-2] + 1/(2*dy**2)*u[-3, i] + (-1/dy**2 + 1/dx)*u[-2, i]
-             + 1/(2*dy**2)*u[-1, i] + 1/(2*dy**2)*u[-1, i+1])
+    b[-1] = (u[-3, i]*(Ae/(4*de) - Be/(2*de**2)) + u[-2, i]*Be/de**2
+             + u[-2, i]**2/dx + u[-1, i]*(-Ae/(4*de) - Be/(2*de**2))
+             + u[-1, i+1]*(-Ae/(4*de) - Be/(2*de**2)))
 
-    # # # Use 4th-Order-Accurate scheme for j = 2 to j = Ny-3
-    # Store coefficients for second internal node
-    A[1, 0] = -2/(3*dy**2)
-    A[1, 1] = 5/(4*dy**2) + 1/dx
-    A[1, 2] = -2/(3*dy**2)
-    A[1, 3] = 1/(24*dy**2)
-    b[1] = (y[2] + -1/(24*dy**2)*u[0, i] + 2/(3*dy**2)*u[1, i]
-            + (1/dx-5/(4*dy**2))*u[2, i] + 2/(3*dy**2)*u[3, i]
-            + (-1/(24*dy**2))*u[4, i] + (-1/(24*dy**2))*u[0, i+1])
+    # %% Use 4th-Order-Accurate scheme for j = 3 to j = Ny-2
 
-    # Store coefficients for second-from-last internal node
-    A[-2, -1] = -2/(3*dy**2)
-    A[-2, -2] = 5/(4*dy**2) + 1/dx
-    A[-2, -3] = -2/(3*dy**2)
-    A[-2, -4] = 1/(24*dy**2)
-    b[-2] = (y[-3] + -1/(24*dy**2)*u[-5, i] + 2/(3*dy**2)*u[-4, i]
-             + (1/dx-5/(4*dy**2))*u[-3, i] + 2/(3*dy**2)*u[-2, i]
-             + (-1/(24*dy**2))*u[-1, i] + (-1/(24*dy**2))*u[-1, i+1])
+    # Second internal node (j = 3)
+    # Calculate values of A(eta) and B(eta) at j
+    Ae = v[2, i]*etaY[2] - nu*etaY[2]*etaYY[2]/RD
+    Be = -nu*etaY[2]**2/RD
 
-    # Loop over internal nodes to compute and store coefficients
+    # Store coefficients and value for RHS vector b
+    A[1, 0] = -Ae/(3*de) + 2*Be/(3*de**2)
+    A[1, 1] = -5*Be/(4*de**2) + u[2, i]/dx
+    A[1, 2] = Ae/(3*de) + 2*Be/(3*de**2)
+    A[1, 3] = -Ae/(24*de) - Be/(24*de**2)
+    b[1] = (u[0, i]*(-Ae/(24*de) + Be/(24*de**2))
+            + u[1, i]*(Ae/(3*de) - 2*Be/(3*de**2))
+            + u[2, i]*(5*Be/(4*de**2) + u[2, i]/dx)
+            + u[3, i]*(-Ae/(3*de) - 2*Be/(3*de**2))
+            + u[4, i]*(Ae/(24*de) + Be/(24*de**2))
+            + u[0, i+1]*(-Ae/(24*de) + Be/(24*de**2)))
+
+    # Second-to-last internal node (j = Ny-2)
+    # Calculate values of A(eta) and B(eta) at j
+    Ae = v[-3, i]*etaY[-3] - nu*etaY[-3]*etaYY[-3]/RD
+    Be = -nu*etaY[-3]**2/RD
+
+    # Store coefficients and value for RHS vector b
+    A[-2, -4] = Ae/(24*de) - Be/(24*de**2)
+    A[-2, -3] = -Ae/(3*de) + 2*Be/(3*de**2)
+    A[-2, -2] = -5*Be/(4*de**2) + u[-3, i]/dx
+    A[-2, -1] = Ae/(3*de) + 2*Be/(3*de**2)
+    b[-2] = (u[-5, i]*(-Ae/(24*de) + Be/(24*de**2))
+             + u[-4, i]*(Ae/(3*de) - 2*Be/(3*de**2))
+             + u[-3, i]*(5*Be/(4*de**2) + u[-3, i]/dx)
+             + u[-2, i]*(-Ae/(3*de) - 2*Be/(3*de**2))
+             + u[-1, i]*(Ae/(24*de) + Be/(24*de**2))
+             + u[-1, i+1]*(Ae/(24*de) + Be/(24*de**2)))
+
+    # %% Loop over internal nodes to compute and store coefficients
     for j in range(2, Ny-4):
-        A[j, j-2] = 1/(24*dy**2)
-        A[j, j-1] = -2/(3*dy**2)
-        A[j, j] = 5/(4*dy**2) + 1/dx
-        A[j, j+1] = -2/(3*dy**2)
-        A[j, j+2] = 1/(24*dy**2)
-        b[j] = (y[j+1] + -1/(24*dy**2)*u[j-1, i] + 2/(3*dy**2)*u[j, i]
-                + (1/dx-5/(4*dy**2))*u[j+1, i] + 2/(3*dy**2)*u[j+2, i]
-                + (-1/(24*dy**2))*u[j+3, i])
+        # Calculate values of A(eta) and B(eta) at j
+        Ae = v[j, i]*etaY[j] - nu*etaY[j]*etaYY[j]/RD
+        Be = -nu*etaY[j]**2/RD
 
+        A[j, j-2] = Ae/(24*de) - Be/(24*de**2)
+        A[j, j-1] = -Ae/(3*de) + 2*Be/(3*de**2)
+        A[j, j] = -5*Be/(4*de**2) + u[j, i]/dx
+        A[j, j+1] = Ae/(3*de) + 2*Be/(3*de**2)
+        A[j, j+2] = -Ae/(24*de) - Be/(24*de**2)
+        b[j] = (u[j-2, i]*(-Ae/(24*de) + Be/(24*de**2))
+                + u[j-1, i]*(Ae/(3*de) - 2*Be/(3*de**2))
+                + u[j, i]*(5*Be/(4*de**2) + u[j, i]/dx)
+                + u[j+1, i]*(-Ae/(3*de) - 2*Be/(3*de**2))
+                + u[j+2, i]*(Ae/(24*de) + Be/(24*de**2)))
+
+    # Perform matrix inversion to solve for u
     if method == 'lu':  # if input was for LU decomposition
         u[1:-1, i+1] = pentaLU(A, b)  # call the pentaLU solver
+
     if method == 'inv':  # if input was for built-in inv (for testing)
         u[1:-1, i+1] = (inv(A)@b).transpose()  # solve by inverting matrix
+
+    # %% Now that u has been solved for, use continuity to solve for v
+
+    # Initialize matrix A and vector b for equation [[A]]*[v] = [b]
+    A = np.zeros([Ny - 1, Ny - 1])
+    b = np.zeros([Ny - 1, 1])
+
+#    # Use third order FDS3 in x
+#    #
+    A[0, 0] = -3*etaY[1]/(6*de)
+    A[0, 1] = 6*etaY[1]/(6*de)
+    A[0, 2] = -etaY[1]/(6*de)
+    b[0] = -(u[1, 1]-u[1, 1])/dx
+    elif i == len(x)-2:  # if on final x-step
+        print('elif')
+    else:  # normal internal nodes
+        A[j, ]
+
+    # ## OLD VERSION
+    # Loop over all rows with first order
+#    for j in range(len(b)):
+#        A[j, j] = -etaY[j+1]/(2*de)
+#        if j != len(b)-1:  # if not on last loop
+#            A[j, j+1] = etaY[j+1]/(2*de)
+#            b[j] = -(u[j, i+1]-u[j, i])/dx - etaY[j+1]/2*(v[j+1, i]-v[j, i])/de
+#        else:
+#            b[j] = (-(u[j, i+1]-u[j, i])/dx-etaY[j+1]/2*(v[j+1, i]-v[j, i])/de
+#                    - etaY[j+1]/(2*de)*v[j+1, i+1])
+    # ##
+
+    # Perform matrix inversion to solve for v
+    if method == 'lu':  # if input was for LU decomposition
+        v[1:, i+1] = pentaLU(A, b)  # call the pentaLU solver
+    if method == 'inv':  # if input was for built-in inv (for testing)
+        v[1:, i+1] = (inv(A)@b).transpose()  # solve by inverting matrix
 
 # output is the u-matrix
 # return u
 
-# Plot results
+# Plot A matrix
+#    c = np.linspace(1, np.shape(A)[0]-1, np.shape(A)[0])
+#    plt.contourf(c, c, A, cmap='plasma',
+#                 levels=np.linspace(0., np.amax(u), 11))
+#    plt.colorbar()
+#
+#    np.round(A[0:4, 0:4], 4)
+#    np.round(A[-4:, -4:], 5)
+
+# %% Plot results
+# plt.figure(figsize=(6, 4))
+# plt.contourf(x, eta, u, cmap='plasma',
+#              levels=np.linspace(0., np.amax(u), 11))
+# cbar = plt.colorbar()
+# cbar.ax.set_ylabel('    u', rotation=0,
+#                   weight='bold')
+# plt.xlabel('x')
+# plt.ylabel('eta', rotation=0)
+
+nSteps = 8
 plt.figure(figsize=(6, 4))
-plt.contourf(x, y, u, cmap='plasma', levels=np.linspace(0., np.amax(u), 11))
+plt.contourf(x[0:nSteps], y, u[:, 0:nSteps], cmap='plasma')
 cbar = plt.colorbar()
-plt.title('u')
+cbar.ax.set_ylabel('    u', rotation=0,
+                   weight='bold')
+plt.xlabel('x')
+plt.ylabel('y', rotation=0)
+
 
 plt.figure(figsize=(6, 4))
 plt.contourf(x, y, v, cmap='plasma', levels=np.linspace(0., 1, 11))
 cbar = plt.colorbar()
 plt.title('v')
+plt.xlabel('x')
+plt.ylabel('y', rotation=0)
+
+# eta = np.linspace(0., 1., len(y))
+# s = 3
+# yy = np.array([yMax*sinh(s*x)/sinh(s) for x in eta])
+# plt.plot(eta, np.zeros(len(eta)), 'o', yy, np.zeros(len(yy)), 'x')
+#
+# eta = np.array([asinh(yi/yMax*sinh(s))/s for yi in y])
+# plt.plot(eta, y, '.')
+
+plt.figure(figsize=(6, 4))
+plt.plot(u[:, 0], y, 'r', u[:, 20], y, 'g', u[:, -1], y, 'b')
+plt.legend(['X=0', 'X=20', 'X=40'])
+
+
+def blasius(Nx, Ny):  # Define function to calculate Blasius BL solution
+    print('Blasius')
