@@ -53,10 +53,6 @@ import time
 import os
 
 
-def blasius(Nx, Ny):  # Define function to calculate Blasius BL solution
-    print('Blasius')
-
-
 def pentaLU(A, b):  # Define LU Decomposition function to solve A*x = b for x
     """
     Function to solve A*x = b for a given a pentadiagonal 2D array A and right-

@@ -23,9 +23,7 @@ The boundary conditions (BCs) in nondimensional form are:
 import numpy as np
 from numpy.linalg import inv
 import matplotlib.pyplot as plt
-from math import sin, pi, sinh, cosh, asinh, sqrt
-import csv
-import os
+from math import sin, pi, sinh, cosh, asinh
 
 
 def pentaLU(A, b):  # Define LU Decomposition function to solve A*x = b for x
@@ -89,22 +87,16 @@ def pentaLU(A, b):  # Define LU Decomposition function to solve A*x = b for x
     return xVec
 
 
-# %% Main function
 # def main(Nx, Ny, method):  # Define main function to set up grid and A matrix
 #                and march in x-direction using Crank-Nicolson algorithm
 #       Inputs:  Nx = number of nodes in x-direction
 #                Ny = number of nodes in y-direction
 #                method = "lu" or "inv" for matrix inversion
 #                s = stretching factor
-
 Nx = 41
 Ny = 151
 method = 'lu'
 s = 5
-
-# Define bounds of computational domain
-xMax = 20  # Dimensional distance in m
-yMax = 10  # Scaled by BL height
 
 # Define given dimensional quantities
 nuInfDim = 1.5e-6  # Dimensional freestream viscosity in m^2/s
@@ -117,10 +109,15 @@ RD = uInfDim*deltaDim**2/(LDim*nuInfDim)
 nu = 1  # Assume viscosity in BL is equal to freestream viscosity
 
 # Make linear-spaced 1D array of x-values from 0 to 1 with Nx elements
-x = np.linspace(0, xMax, Nx)
+x = np.linspace(0, 1, Nx)
 
 # Make linear-spaced 1D array of eta-values from 0 to 1 with Ny elements
 eta = np.linspace(0, 1, Ny)
+
+# Define bounds of computational domain
+xMax = 40
+yMax = 10
+
 
 # %% Compute values of y based on eta and ymax
 y = [yMax*sinh(s*et)/sinh(s) for et in eta]
@@ -156,17 +153,21 @@ etaY1 = asinh(1*sinh(s)/yMax)/s  # Determine eta value corresponding to y = 1
 for n in range(len(y)):
     # u(0, y <= 1) = sin(pi*y/2)
     if eta[n] <= etaY1:
-        u[n, 0] = sin(pi*y[n]/2)
+        u[n, 0] = sin(pi*yMax*sinh(s*eta[n])/sinh(s)/2)
     # u(0, y > 1) = 1
     elif y[n] > etaY1:
         u[n, 0] = 1
 
-# %% Apply boundary condition to v matrix
+# %% Apply boundary conditions to v matrix
 # Set v(x, eta=0) to be 0 from impermeable wall condition
 v[0, :] = 0
 
+# Set v(x, eta=1) to be 0 due to upper freestream condition
+v[-1, :] = 0
+
 # %% Loop over each x-step
 for i in range(len(x)-1):
+
     # Set up matrix and RHS "b" matrix (knowns)
     # for Crank-Nicolson algorithm
 
@@ -180,78 +181,80 @@ for i in range(len(x)-1):
 
     # at j = 2 (near bottom border of domain)
     # Calculate values of A(eta) and B(eta) at j = 2
-    j = 1  # note python indices start at 0, not 1
-    Ae = dx/(2*u[j, i]) * (v[j, i]*etaY[j] - etaYY[j]/RD)
-    Be = -dx/(2*u[j, i]) * etaY[j]**2/RD
+    Ae = v[1, i]*etaY[1] - nu*etaY[1]*etaYY[1]/RD
+    Be = -nu*etaY[1]**2/RD
 
     # Populate coefficient matrix
-    A[0, 0] = 1 - 2*Be/de**2  # Assign value in matrix location [1, 1]
-    A[0, 1] = Ae/(2*de) + Be/de**2  # Assign value in matrix location
-    b[0] = (1+2*Be/de**2)*u[j, i] + (-Ae/(2*de) - Be/de**2)*u[j+1, i]
-
-    # %% Use 4th-Order-Accurate scheme for j = 3
-
-    # Second internal node (j = 3)
-    # Calculate values of A(eta) and B(eta) at j
-    j = 2
-    Ae = dx/(2*u[j, i]) * (v[j, i]*etaY[j] - etaYY[j]/RD)
-    Be = -dx/(2*u[j, i]) * etaY[j]**2/RD
-
-    # Store coefficients and value for RHS vector b
-    A[1, 0] = (-2*Ae/de + 4*Be/de**2)/3
-    A[1, 1] = 1 - 5/2*Be/de**2
-    A[1, 2] = 2/3*Ae/de+4/3*Be/de**2
-    A[1, 3] = -Ae/(12*de) - Be/(12*de**2)
-    b[1] = ((2/3*Ae/de - 4/3*Be/(de**2))*u[j-1, i]
-            + (1 + 5/2*Be/(de**2))*u[j, i]
-            + (-2/3*Ae/de - 4/3*Be/(de**2))*u[j+1, i]
-            + (Ae/(12*de) + Be/(12*(de**2)))*u[j+2, i])
-
-    # %% Loop over internal nodes to compute and store coefficients
-    for j in range(3, Ny-3):
-        # Calculate values of A(eta) and B(eta) at j
-        Ae = dx/(2*u[j, i]) * (v[j, i]*etaY[j] - etaYY[j]/RD)
-        Be = -dx/(2*u[j, i]) * etaY[j]**2/RD
-        A[j-1, j-3] = Ae/(12*de) - Be/(12*de**2)
-        A[j-1, j-2] = -2/3*Ae/de + 4/3*Be/de**2
-        A[j-1, j-1] = 1 - 5/2*Be/de**2
-        A[j-1, j] = 2/3*Ae/de+4/3*Be/de**2
-        A[j-1, j+1] = -Ae/(12*de) - Be/(12*de**2)
-        b[j-1] = ((-Ae/(12*de)+Be/(12*(de**2)))*u[j-2, i]
-                  + (2/3*Ae/de-4/3*Be/de**2)*u[j-1, i]
-                  + (1+5/2*Be/de**2)*u[j, i]
-                  + (-2/3*Ae/de-4/3*Be/de**2)*u[j+1, i]
-                  + (Ae/(12*de)+Be/(12*de**2))*u[j+2, i])
-
-    # %% Second-to-last internal node (j = Ny-2)
-    # Calculate values of A(eta) and B(eta) at j
-    j = Ny-3
-    Ae = dx/(2*u[j, i]) * (v[j, i]*etaY[j] - etaYY[j]/RD)
-    Be = -dx/(2*u[j, i]) * etaY[j]**2/RD
-
-    # Store coefficients and value for RHS vector b
-    A[-2, j-3] = Ae/(12*de) - Be/(12*de**2)
-    A[-2, j-2] = -2/3*Ae/de + 4/3*Be/de**2
-    A[-2, j-1] = 1 - 5/2*Be/de**2
-    A[-2, j] = 2/3*Ae/de+4/3*Be/de**2
-    b[-2] = ((-Ae/(12*de)+Be/(12*de**2))*u[j-2, i]
-             + (2/3*Ae/de-4/3*Be/de**2)*u[j-1, i]
-             + (1+5/2*Be/de**2)*u[j, i]
-             + (-2/3*Ae/de - 4/3*Be/de**2)*u[j+1, i]
-             + (Ae/(6*de) + Be/(6*de**2)))
+    A[0, 0] = u[1, i]/dx - Be/de**2  # Assign value in matrix location [1, 1]
+    A[0, 1] = Ae/(4*de) + Be/(2*de**2)  # Assign value in matrix location
+    b[0] = (u[0, i]*(Ae/(4*de) - Be/(2*de**2)) + u[1, i]*Be/de**2
+            + u[1, i]**2/dx + u[2, i]*(-Ae/(4*de) - Be/(2*de**2))
+            + u[0, i+1]*(Ae/(4*de) - Be/(2*de**2)))
 
     # %% at j = Ny-1 (near top border of domain)
     # Calculate values of A(eta) and B(eta) at j = Ny-1
-    j = Ny-2
-    Ae = dx/(2*u[j, i]) * (v[j, i]*etaY[j] - etaYY[j]/RD)
-    Be = -dx/(2*u[j, i]) * etaY[j]**2/RD
+    Ae = v[-2, i]*etaY[-2] - nu*etaY[-2]*etaYY[-2]/RD
+    Be = -nu*etaY[-2]**2/RD
 
     # Populate coefficient matrix
-    A[-1, -1] = 1 - 2*Be/de**2  # Assign value to last diagonal element
-    A[-1, -2] = -Ae/(2*de) + Be/de**2  # Assign value to left of last diag
-    b[-1] = ((Ae/(2*de) - Be/de**2)*u[j-1, i]
-             + (1+2*Be/de**2)*u[j, i]
-             + (-Ae/de - 2*Be/de**2))
+    A[-1, -1] = u[-2, i]/dx - Be/de**2  # Assign value to last diagonal element
+    A[-1, -2] = -Ae/(4*de) + Be/(2*de**2)  # Assign value to left of last diag
+    b[-1] = (u[-3, i]*(Ae/(4*de) - Be/(2*de**2)) + u[-2, i]*Be/de**2
+             + u[-2, i]**2/dx + u[-1, i]*(-Ae/(4*de) - Be/(2*de**2))
+             + u[-1, i+1]*(-Ae/(4*de) - Be/(2*de**2)))
+
+    # %% Use 4th-Order-Accurate scheme for j = 3 to j = Ny-2
+
+    # Second internal node (j = 3)
+    # Calculate values of A(eta) and B(eta) at j
+    Ae = v[2, i]*etaY[2] - nu*etaY[2]*etaYY[2]/RD
+    Be = -nu*etaY[2]**2/RD
+
+    # Store coefficients and value for RHS vector b
+    A[1, 0] = -Ae/(3*de) + 2*Be/(3*de**2)
+    A[1, 1] = -5*Be/(4*de**2) + u[2, i]/dx
+    A[1, 2] = Ae/(3*de) + 2*Be/(3*de**2)
+    A[1, 3] = -Ae/(24*de) - Be/(24*de**2)
+    b[1] = (u[0, i]*(-Ae/(24*de) + Be/(24*de**2))
+            + u[1, i]*(Ae/(3*de) - 2*Be/(3*de**2))
+            + u[2, i]*(5*Be/(4*de**2) + u[2, i]/dx)
+            + u[3, i]*(-Ae/(3*de) - 2*Be/(3*de**2))
+            + u[4, i]*(Ae/(24*de) + Be/(24*de**2))
+            + u[0, i+1]*(-Ae/(24*de) + Be/(24*de**2)))
+
+    # %% Loop over internal nodes to compute and store coefficients
+    for j in range(2, Ny-4):
+        # Calculate values of A(eta) and B(eta) at j
+        Ae = v[j, i]*etaY[j] - nu*etaY[j]*etaYY[j]/RD
+        Be = -nu*etaY[j]**2/RD
+
+        A[j, j-2] = Ae/(24*de) - Be/(24*de**2)
+        A[j, j-1] = -Ae/(3*de) + 2*Be/(3*de**2)
+        A[j, j] = -5*Be/(4*de**2) + u[j, i]/dx
+        A[j, j+1] = Ae/(3*de) + 2*Be/(3*de**2)
+        A[j, j+2] = -Ae/(24*de) - Be/(24*de**2)
+        b[j] = (u[j-2, i]*(-Ae/(24*de) + Be/(24*de**2))
+                + u[j-1, i]*(Ae/(3*de) - 2*Be/(3*de**2))
+                + u[j, i]*(5*Be/(4*de**2) + u[j, i]/dx)
+                + u[j+1, i]*(-Ae/(3*de) - 2*Be/(3*de**2))
+                + u[j+2, i]*(Ae/(24*de) + Be/(24*de**2)))
+
+    # %% Second-to-last internal node (j = Ny-2)
+    # Calculate values of A(eta) and B(eta) at j
+    Ae = v[-3, i]*etaY[-3] - nu*etaY[-3]*etaYY[-3]/RD
+    Be = -nu*etaY[-3]**2/RD
+
+    # Store coefficients and value for RHS vector b
+    A[-2, -4] = Ae/(24*de) - Be/(24*de**2)
+    A[-2, -3] = -Ae/(3*de) + 2*Be/(3*de**2)
+    A[-2, -2] = -5*Be/(4*de**2) + u[-3, i]/dx
+    A[-2, -1] = Ae/(3*de) + 2*Be/(3*de**2)
+    b[-2] = (u[-5, i]*(-Ae/(24*de) + Be/(24*de**2))
+             + u[-4, i]*(Ae/(3*de) - 2*Be/(3*de**2))
+             + u[-3, i]*(5*Be/(4*de**2) + u[-3, i]/dx)
+             + u[-2, i]*(-Ae/(3*de) - 2*Be/(3*de**2))
+             + u[-1, i]*(Ae/(24*de) + Be/(24*de**2))
+             + u[-1, i+1]*(Ae/(24*de) + Be/(24*de**2)))
 
     # Perform matrix inversion to solve for u
     if method == 'lu':  # if input was for LU decomposition
@@ -383,65 +386,45 @@ for i in range(len(x)-1):
 #    np.round(A[-4:, -4:], 5)
 
 # %% Plot results
+# plt.figure(figsize=(6, 4))
+# plt.contourf(x, eta, u, cmap='plasma',
+#              levels=np.linspace(0., np.amax(u), 11))
+# cbar = plt.colorbar()
+# cbar.ax.set_ylabel('    u', rotation=0,
+#                   weight='bold')
+# plt.xlabel('x')
+# plt.ylabel('eta', rotation=0)
 
-# def plotsVsBlasius(u, xMax, y):  # Define function to plot versus Blasius
+nSteps = -1
+plt.figure(figsize=(6, 4))
+plt.contourf(x[0:nSteps], y, u[:, 0:nSteps], cmap='plasma')
+cbar = plt.colorbar()
+cbar.ax.set_ylabel('    u', rotation=0)
+plt.xlabel('x')
+plt.ylabel('y', rotation=0)
 
-# Yes! It is possible to read text files in Python!
 
-# Read CSV containing Blasius solution and store variables
-with open('readfiles//Blasius.csv', newline='') as csvfile:
-    reader = csv.reader(csvfile, delimiter=' ')
-    data = [row[0].split(',') for row in reader]
-    etaB = [eval(val) for val in data[0]]  # Store similarity variable list
-    g = [eval(val) for val in data[2]]  # Store normalized velocity value list
+plt.figure(figsize=(6, 4))
+plt.contourf(x, y, v, cmap='plasma', levels=np.linspace(0., 1, 11))
+cbar = plt.colorbar()
+cbar.ax.set_ylabel('    v', rotation=0)
+plt.xlabel('x')
+plt.ylabel('y', rotation=0)
 
-xLoc = [0, 5, 10, 15, 20]  # Dimensional x-locations (m)
+# eta = np.linspace(0., 1., len(y))
+# s = 3
+# yy = np.array([yMax*sinh(s*x)/sinh(s) for x in eta])
+# plt.plot(eta, np.zeros(len(eta)), 'o', yy, np.zeros(len(yy)), 'x')
+#
+# eta = np.array([asinh(yi/yMax*sinh(s))/s for yi in y])
+# plt.plot(eta, y, '.')
 
-delta99 = []  # initialize array to store 99% BL thickness values
-xInds = []  # initialize array to store x-indices corresponding to xLocs above
-setbacks = []  # initialize array to store estimates for x~
-# Loop through each x-location and solve for 99% BL thickness and estimate
-# x~ based on each BL thickness
-mrk = 0  # marker to count how many while loops
-for xi in xLoc:
-    xInd = round(xi/xMax*(Nx-1))  # find index corresponding to that x-position
-    xInds.append(xInd)
-    yInd = 0  # store index corresponding to BL height
-    while True:
-        if u[yInd, xInd] > 0.99:  # if 99% velocity satisfied
-            delta99.append(deltaDim*y[yInd])  # Store BL height (m)
-            setbacks.append(delta99[-1]**2*uInfDim/nuInfDim/4.91**2-xLoc[mrk])
-            mrk += 1
-            break  # stop while loop
-        yInd += 1
+plt.figure(figsize=(6, 4))
+plt.plot(u[:, 0], eta, 'r', u[:, 20], eta, 'g', u[:, -1], eta, 'b')
+plt.legend(['X=0', 'X=20', 'X=40'])
+plt.xlabel('u')
+plt.ylabel('eta')
 
-# Dimensionalize velocity from Blasius solution
-uB = [gi*uInfDim for gi in g]
 
-# Dimensionalize y-coordinates for numerical solution
-yDim = [deltaDim*yi for yi in y]
-
-# Initialize figure with 5 subplots/axes
-axs = ['ax' + str(n) for n in range(1, 6)]
-fig, axs = plt.subplots(figsize=(10, 4), ncols=5,
-                        sharey='row')
-
-# Loop through all desired positions and plot numerical result vs Blasius
-for ii in range(5):
-    xCorr = xLoc[ii] + 0.005**2 * uInfDim / nuInfDim / 4.91**2
-    yB = [sqrt(xCorr)*etaBi/sqrt(uInfDim/nuInfDim) for etaBi in etaB]
-    ax = axs[ii]
-    ax.plot(uInfDim*u[:, xInds[ii]], yDim, 'r', uB, yB, 'k*')
-    ax.set_xlabel('u [m/s]', fontweight='bold')
-    ax.set_title('x = {0:0.0f} L'.format(xLoc[ii]/0.5))
-    if ii == 0:
-        ax.set_ylabel('y [m]        ', fontweight='bold', rotation=0)
-
-plt.legend(['FDM', 'Blasius'])  # add legend
-plt.ylim(ymin=0, ymax=0.01)  # axes limits
-plt.savefig(os.getcwd()+"\\figures\\profiles.png", dpi=320,
-            bbox_inches='tight')  # save figure to file
-plt.close()  # close figure
-
-print('Estimated initial value of x~ is {0:0.2f} m'.format(0.005**2*uInfDim
-                                                           / nuInfDim/4.91**2))
+def blasius(Nx, Ny):  # Define function to calculate Blasius BL solution
+    print('Blasius')
