@@ -475,9 +475,9 @@ def stretchEffect(Nx, Ny, stretch):
 
 
 # %% Run functions in order
-Nx = 41
-Ny = 151
-stretching = 5
+Nx = 41  # number of nodes in x-direction
+Ny = 151  # number of nodes in y-direction
+stretching = 5  # stretching factor
 u, y = main(Nx, Ny, 'lu', stretching)
 
 # Plot results compared to Blasius solution and calculate initial x~ position
@@ -488,4 +488,4 @@ thicc(u, y)
 
 # %% Run function to see effect of stretching
 stretch = [1, 5, 10]
-stretchEffect
+stretchEffect(Nx, Ny, stretch)
