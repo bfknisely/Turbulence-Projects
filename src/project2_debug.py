@@ -373,75 +373,88 @@ for i in range(len(x)-1):
 # output is the u-matrix
 # return u
 
-# Plot A matrix
-#    c = np.linspace(1, np.shape(A)[0]-1, np.shape(A)[0])
-#    plt.contourf(c, c, A, cmap='plasma',
-#                 levels=np.linspace(0., np.amax(u), 11))
-#    plt.colorbar()
-#
-#    np.round(A[0:4, 0:4], 4)
-#    np.round(A[-4:, -4:], 5)
 
 # %% Plot results
 
-# def plotsVsBlasius(u, xMax, y):  # Define function to plot versus Blasius
+def plotsVsBlasius(u, xMax, y):  # Define function to plot versus Blasius
 
-# Yes! It is possible to read text files in Python!
+    # Yes! It is possible to read text files in Python!
 
-# Read CSV containing Blasius solution and store variables
-with open('readfiles//Blasius.csv', newline='') as csvfile:
-    reader = csv.reader(csvfile, delimiter=' ')
-    data = [row[0].split(',') for row in reader]
-    etaB = [eval(val) for val in data[0]]  # Store similarity variable list
-    g = [eval(val) for val in data[2]]  # Store normalized velocity value list
+    # Read CSV containing Blasius solution and store variables
+    with open('readfiles//Blasius.csv', newline='') as csvfile:
+        reader = csv.reader(csvfile, delimiter=' ')
+        data = [row[0].split(',') for row in reader]
+        etaB = [eval(val) for val in data[0]]  # Store similarity variable list
+        g = [eval(val) for val in data[2]]  # Store normalized velocity value list    
 
-xLoc = [0, 5, 10, 15, 20]  # Dimensional x-locations (m)
+    xLoc = [0, 5, 10, 15, 20]  # Dimensional x-locations (m)
 
-delta99 = []  # initialize array to store 99% BL thickness values
-xInds = []  # initialize array to store x-indices corresponding to xLocs above
-setbacks = []  # initialize array to store estimates for x~
-# Loop through each x-location and solve for 99% BL thickness and estimate
-# x~ based on each BL thickness
-mrk = 0  # marker to count how many while loops
-for xi in xLoc:
-    xInd = round(xi/xMax*(Nx-1))  # find index corresponding to that x-position
-    xInds.append(xInd)
-    yInd = 0  # store index corresponding to BL height
-    while True:
-        if u[yInd, xInd] > 0.99:  # if 99% velocity satisfied
-            delta99.append(deltaDim*y[yInd])  # Store BL height (m)
-            setbacks.append(delta99[-1]**2*uInfDim/nuInfDim/4.91**2-xLoc[mrk])
-            mrk += 1
-            break  # stop while loop
-        yInd += 1
+    delta99 = []  # initialize to store calculated 99% BL thickness values
+    xInds = []  # initialize to store x-indices corresponding to xLocs above
+    setbacks = []  # initialize array to store estimates for x~
+    # Loop through each x-location and solve for 99% BL thickness and estimate
+    # x~ based on each BL thickness
+    mrk = 0  # marker to count how many while loops
+    for xi in xLoc:
+        xInd = round(xi/xMax*(Nx-1))  # find index corresponding to that xLoc
+        xInds.append(xInd)
+        yInd = 0  # store index corresponding to BL height
+        while True:
+            if u[yInd, xInd] > 0.99:  # if 99% velocity satisfied
+                delta99.append(deltaDim*y[yInd])  # Store BL height (m)
+                setbacks.append(delta99[-1]**2*uInfDim/nuInfDim
+                                / 4.91**2-xLoc[mrk])
+                mrk += 1
+                break  # stop while loop
+            yInd += 1
 
-# Dimensionalize velocity from Blasius solution
-uB = [gi*uInfDim for gi in g]
+    # Dimensionalize velocity from Blasius solution
+    uB = [gi*uInfDim for gi in g]
 
-# Dimensionalize y-coordinates for numerical solution
-yDim = [deltaDim*yi for yi in y]
+    # Dimensionalize y-coordinates for numerical solution
+    yDim = [deltaDim*yi for yi in y]
 
-# Initialize figure with 5 subplots/axes
-axs = ['ax' + str(n) for n in range(1, 6)]
-fig, axs = plt.subplots(figsize=(10, 4), ncols=5,
-                        sharey='row')
+    # Initialize figure with 5 subplots/axes
+    axs = ['ax' + str(n) for n in range(1, 6)]
+    fig, axs = plt.subplots(figsize=(14, 8), ncols=5,
+                            sharey='row')
 
-# Loop through all desired positions and plot numerical result vs Blasius
-for ii in range(5):
-    xCorr = xLoc[ii] + 0.005**2 * uInfDim / nuInfDim / 4.91**2
-    yB = [sqrt(xCorr)*etaBi/sqrt(uInfDim/nuInfDim) for etaBi in etaB]
-    ax = axs[ii]
-    ax.plot(uInfDim*u[:, xInds[ii]], yDim, 'r', uB, yB, 'k*')
-    ax.set_xlabel('u [m/s]', fontweight='bold')
-    ax.set_title('x = {0:0.0f} L'.format(xLoc[ii]/0.5))
-    if ii == 0:
-        ax.set_ylabel('y [m]        ', fontweight='bold', rotation=0)
+    # Loop through all desired positions and plot numerical result vs Blasius
+    for ii in range(5):
+        xCorr = xLoc[ii] + 0.005**2 * uInfDim / nuInfDim / 4.91**2
+        yB = [sqrt(xCorr)*etaBi/sqrt(uInfDim/nuInfDim) for etaBi in etaB]
+        ax = axs[ii]
+        ax.plot(uInfDim*u[:, xInds[ii]], yDim, 'r', uB, yB, 'k*')
+        ax.set_xlabel('u [m/s]', fontweight='bold')
+        ax.set_title('x = {0:0.0f} L'.format(xLoc[ii]/0.5))
+        if ii == 0:
+            ax.set_ylabel('y [m]        ', fontweight='bold', rotation=0)
 
-plt.legend(['FDM', 'Blasius'])  # add legend
-plt.ylim(ymin=0, ymax=0.01)  # axes limits
-plt.savefig(os.getcwd()+"\\figures\\profiles.png", dpi=320,
-            bbox_inches='tight')  # save figure to file
-plt.close()  # close figure
+    plt.legend(['FDM', 'Blasius'])  # add legend
+    plt.ylim(ymin=0, ymax=0.01)  # axes limits
+    #    plt.savefig(os.getcwd()+"\\figures\\profiles.png", dpi=320,
+    #                bbox_inches='tight')  # save figure to file
+    plt.close()  # close figure
 
-print('Estimated initial value of x~ is {0:0.2f} m'.format(0.005**2*uInfDim
-                                                           / nuInfDim/4.91**2))
+    # Print result to console
+    print('Estimated initial value of x~ is {0:0.2f} m'.format(0.005**2*uInfDim
+                                                               / nuInfDim
+                                                               / 4.91**2))
+
+
+def thicc(u, y):  # function to compute displacement thickness, momentum
+    #               thickness, and shape factor
+
+    Ny = len(y)
+    deltaStar = 0  # initialize displacement thickness
+    thetaStar = 0  # initialize momentum thickness
+    for i in range(1, Ny):
+        uUi = ((1 - u[i, -1]) + (1 - u[i-1, -1]))/2  # find mean velocity deficit
+        dy = (y[i] - y[i-1])*deltaDim  # calculate dimensional y-height difference
+        deltaStar += (uUi)*dy  # add ith contribution
+        thetaStar += uUi*(1 - uUi)*dy  # add ith contribution
+    
+    # Print results to console
+    print('Displacement thickness at x = 40 L is {0:0.6f} m'.format(deltaStar))
+    print('Momentum thickness at x = 40 L is {0:0.6f} m'.format(thetaStar))
+
