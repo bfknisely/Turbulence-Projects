@@ -6,6 +6,27 @@ Created on Thu Mar 15 19:06:50 2018
 
 @author: Brian
 
+AERSP/ME 525: Turbulence and Applications to CFD: RANS
+Computer Project Number 2
+
+The purpose of this code is to use finite difference to solve the laminar
+boundary layer equations for a 2D flat plate and compare to the Blasius
+solution.
+
+The PDEs with dimensional variables (denoted with ~) are:
+    du~/dx~ + dv~/dy~ = 0
+    u~ du~/dx~ + v~ du~/dy~ = d/dy~(nu~ du~/dy~)
+
+Note: all derivatives are partial derivatives
+
+The equations are nondimensionalized with:
+    x = x~/L~
+    y = y~/delta~
+    u = u~/Uinf~
+    v = v~L~/(Uinf~delta~)
+    nu = nu~/nu_inf~
+    RD = L~nu_inf~/(Uinf~(delta~)^2)
+
 The resulting nondimensional equations are:
     du/dx + dv/dy = 0
     u du/dx + v du/dy = 1/RD d/dy(nu du/dy)
@@ -16,7 +37,15 @@ The boundary conditions (BCs) in nondimensional form are:
     u(0, y <= 1) = sin(pi*y/2)  (starting profile)
     u(0, y > 1) = 1  (starting profile)
     v(x, 0) = 0  (impermeable wall condition)
-    v(x, yMax) = 0  (freestream is purely in x-direction, no y-component)
+
+The Crank-Nicolson Algorithm is to be used to march in the x-direction, using
+a uniform grid and central differencing scheme that is fourth-order in y. An LU
+decompsition algorithm is used to solve the pentadiagonal matrix for u-values
+at each x-step. After computing the u-values, the continuity equation is solved
+for the v-values at that step. A fourth-order noncentered scheme is used to
+generate the coefficient matrix for v to avoid singularities when inverting the
+matrix. The solution is compared to the Blasius solution for a flat plate
+boundary layer. The effect of stretching factor is investigated.
 """
 
 # Import packages for arrays, plotting, timing, and file I/O

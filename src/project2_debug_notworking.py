@@ -162,9 +162,6 @@ for n in range(len(y)):
 # Set v(x, eta=0) to be 0 from impermeable wall condition
 v[0, :] = 0
 
-# Set v(x, eta=1) to be 0 due to upper freestream condition
-v[-1, :] = 0
-
 # %% Loop over each x-step
 for i in range(len(x)-1):
 

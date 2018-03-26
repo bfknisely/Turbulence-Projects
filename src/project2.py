@@ -1,7 +1,6 @@
+# -*- coding: utf-8 -*-
 """
-Mon, Feb 19, 2018
-
-@author: Brian F. Knisely
+@author: Brian Knisely
 
 AERSP/ME 525: Turbulence and Applications to CFD: RANS
 Computer Project Number 2
@@ -28,35 +27,36 @@ The resulting nondimensional equations are:
     du/dx + dv/dy = 0
     u du/dx + v du/dy = 1/RD d/dy(nu du/dy)
 
-Again all derivatives are partial derivatives
-
 The boundary conditions (BCs) in nondimensional form are:
     u(x, 0) = 0  (no-slip condition)
     u(x, yMax) = 1  (velocity is equal to freestream at top edge of domain)
     u(0, y <= 1) = sin(pi*y/2)  (starting profile)
     u(0, y > 1) = 1  (starting profile)
     v(x, 0) = 0  (impermeable wall condition)
-    v(x, yMax) = 0  (freestream is purely in x-direction, no y-component)
 
 The Crank-Nicolson Algorithm is to be used to march in the x-direction, using
 a uniform grid and central differencing scheme that is fourth-order in y. An LU
 decompsition algorithm is used to solve the pentadiagonal matrix for u-values
 at each x-step. After computing the u-values, the continuity equation is solved
-for the v-values at that step.
+for the v-values at that step. A fourth-order noncentered scheme is used to
+generate the coefficient matrix for v to avoid singularities when inverting the
+matrix. The solution is compared to the Blasius solution for a flat plate
+boundary layer. The effect of stretching factor is investigated.
 """
 
 # Import packages for arrays, plotting, timing, and file I/O
 import numpy as np
 from numpy.linalg import inv
 import matplotlib.pyplot as plt
-import time
+from math import sin, pi, sinh, cosh, asinh, sqrt
+import csv
 import os
 
 
 def pentaLU(A, b):  # Define LU Decomposition function to solve A*x = b for x
     """
     Function to solve A*x = b for a given a pentadiagonal 2D array A and right-
-    hand side 1D array, b. Shape of A must be at least 5 x 5.
+    hand side 1D array, b. Dims of A must be at least 5 x 5.
     """
 
     Ny = np.shape(A)[0] + 2  # Extract dims of input matrix A
@@ -114,40 +114,85 @@ def pentaLU(A, b):  # Define LU Decomposition function to solve A*x = b for x
     return xVec
 
 
-def main(Nx, Ny, method):  # Define main function to set up grid and A matrix
-    #                and march in x-direction using Crank-Nicolson algorithm
-    #       Inputs:  Nx = number of nodes in x-direction
-    #                Ny = number of nodes in y-direction
-    #                method = "lu" or "inv" for matrix inversion
+# %% Main function
+def main(Nx, Ny, method, s):  # Define main function to set up grid and matrix
+    #                           and march in x-direction using Crank-Nicolson
+    #                           algorithm
 
-    yMax = 10
+    #    Inputs:  Nx = number of nodes in x-direction
+    #             Ny = number of nodes in y-direction
+    #             method = "lu" or "inv" for matrix inversion
+    #             s = stretching factor
+
+    # Inputs for testing
+    # Nx = 41
+    # Ny = 151
+    # method = 'lu'
+    # s = 5
+
+    # Define bounds of computational domain
+    xMax = 20  # Dimensional distance in m
+    yMax = 10  # Scaled by BL height
+
+    # Define given dimensional quantities
+    nuInfDim = 1.5e-6  # Dimensional freestream viscosity in m^2/s
+    uInfDim = 40  # Dimensional freestream velocity in m/s
+    LDim = 0.5  # Length of plate in m
+    deltaDim = 0.005  # Initial BL thickness in m
+
+    # Calculate derived nondimensional quantity
+    RD = uInfDim*deltaDim**2/(LDim*nuInfDim)
 
     # Make linear-spaced 1D array of x-values from 0 to 1 with Nx elements
-    x = np.linspace(0, 1, Nx)
+    x = np.linspace(0, xMax, Nx)
 
-    # Make linear-spaced 1D array of y-values from 0 to 1 with Ny elements
-    y = np.linspace(0, yMax, Ny)
+    # Make linear-spaced 1D array of eta-values from 0 to 1 with Ny elements
+    eta = np.linspace(0, 1, Ny)
 
-    # Calculate spacings Δx and Δy; these are constant with the uniform grid
+    # %% Compute values of y based on eta and ymax
+    y = [yMax*sinh(s*et)/sinh(s) for et in eta]
+
+    # Evaluate values of fPrime and fDoublePrime
+    fPrime = [s*yMax*cosh(s*et)/sinh(s) for et in eta]
+    fDoublePrime = [s**2*yMax*sinh(s*et)/sinh(s) for et in eta]
+    # Determine etaY and etaYY
+    etaY = [1/fP for fP in fPrime]
+    etaYY = [-fDoublePrime[n]/(fPrime[n]**3) for n in range(len(fPrime))]
+
+    # Calculate spacings dx and de; constant with the uniform x-eta grid
     dx = x[1] - x[0]
-    dy = y[1] - y[0]
+    de = eta[1] - eta[0]
 
-    # Initialize u-array: 2D array of zeros
+    # Initialize u- and v-arrays: 2D arrays of zeros
     # of dimension [Nx columns] by [Ny rows]
     u = np.zeros([Ny, Nx])
-    # u is a 2D array of velocities at all spatial locations
+    v = np.zeros([Ny, Nx])
+    # u is a 2D array of nondimensional x-velocities at all spatial locations
+    # v is a 2D array of nondimensional y-velocities at all spatial locations
 
-    # Apply boundary conditions to u matrix
+    # %% Apply boundary conditions to u matrix
 
-    # Set u(x, 0) to be 0 from Dirichlet boundary condition
+    # Set u(x, 0) to be 0 from no-slip boundary condition
     u[0, :] = 0  # Set 0th row, all columns to be 0
 
     # Set u(x, 1) to be 1 from Dirichlet boundary condition
     u[-1, :] = 1  # Set last row, all columns to be 1
 
-    # Set u(0, y) to be y from Dirichlet boundary condition
-    u[:, 0] = y  # Set all rows, 0th column to be y
+    # Set u(0, eta) to starting profile
+    etaY1 = asinh(1*sinh(s)/yMax)/s  # Determine eta value corresponding to y=1
+    for n in range(len(y)):
+        # u(0, y <= 1) = sin(pi*y/2)
+        if eta[n] <= etaY1:
+            u[n, 0] = sin(pi*y[n]/2)
+        # u(0, y > 1) = 1
+        elif y[n] > etaY1:
+            u[n, 0] = 1
 
+    # %% Apply boundary condition to v matrix
+    # Set v(x, eta=0) to be 0 from impermeable wall condition
+    v[0, :] = 0
+
+    # %% Loop over each x-step
     for i in range(len(x)-1):
 
         # Set up matrix and RHS "b" matrix (knowns)
@@ -159,269 +204,276 @@ def main(Nx, Ny, method):  # Define main function to set up grid and A matrix
         # Y-dimension reduced by two because u(x, 0) and u(x, 1)
         # are known already
 
-        # # # Use 2nd-Order-Accurate scheme for first interior nodes
+        # %% Use 2nd-Order-Accurate scheme for first interior nodes
 
-        # at j = 1 (near bottom border of domain)
-        A[0, 0] = 1/dx + 1/dy**2  # Assign value in matrix location [1, 1]
-        A[0, 1] = -1/(2*dy**2)  # Assign value in matrix location [1, 2]
+        # at j = 2 (near bottom border of domain)
+        # Calculate values of A(eta) and B(eta) at j = 2
+        Ae = v[1, i]*etaY[1] - etaY[1]*etaYY[1]/RD
+        Be = -etaY[1]**2/RD
 
-        # Assign right-hand side of equation (known values) for 0th value in b
-        b[0] = (y[1] + 1/(2*dy**2)*u[0, i] + (-1/dy**2 + 1/dx)*u[1, i]
-                + 1/(2*dy**2)*u[2, i] + 1/(2*dy**2)*u[0, i+1])
+        # Populate coefficient matrix
+        A[0, 0] = u[1, i]/dx - Be/de**2  # Assign value in location [1, 1]
+        A[0, 1] = Ae/(4*de) + Be/(2*de**2)  # Assign value in matrix location
+        b[0] = (u[0, i]*(Ae/(4*de) - Be/(2*de**2)) + u[1, i]*Be/de**2
+                + u[1, i]**2/dx + u[2, i]*(-Ae/(4*de) - Be/(2*de**2))
+                + u[0, i+1]*(Ae/(4*de) - Be/(2*de**2)))
 
-        # at j = Ny-2 (near top border of domain)
-        A[-1, -1] = 1/dx + 1/dy**2  # Assign value to last diagonal element
-        A[-1, -2] = -1/(2*dy**2)  # Assign value to left of last diag element
+        # %% at j = Ny-1 (near top border of domain)
+        # Calculate values of A(eta) and B(eta) at j = Ny-1
+        Ae = v[-2, i]*etaY[-2] - etaY[-2]*etaYY[-2]/RD
+        Be = -etaY[-2]**2/RD
 
-        # Assign right-hand side of equation (known values) for last value in b
-        b[-1] = (y[-2] + 1/(2*dy**2)*u[-3, i] + (-1/dy**2 + 1/dx)*u[-2, i]
-                 + 1/(2*dy**2)*u[-1, i] + 1/(2*dy**2)*u[-1, i+1])
+        # Populate coefficient matrix
+        A[-1, -1] = u[-2, i]/dx - Be/de**2  # Assign value to last diag element
+        A[-1, -2] = -Ae/(4*de) + Be/(2*de**2)  # Assign value to left of diag
+        b[-1] = (u[-3, i]*(Ae/(4*de) - Be/(2*de**2)) + u[-2, i]*Be/de**2
+                 + u[-2, i]**2/dx + u[-1, i]*(-Ae/(4*de) - Be/(2*de**2))
+                 + u[-1, i+1]*(-Ae/(4*de) - Be/(2*de**2)))
 
-        # # # Use 4th-Order-Accurate scheme for j = 2 to j = Ny-3
-        # Store coefficients for second internal node
-        A[1, 0] = -2/(3*dy**2)
-        A[1, 1] = 5/(4*dy**2) + 1/dx
-        A[1, 2] = -2/(3*dy**2)
-        A[1, 3] = 1/(24*dy**2)
-        b[1] = (y[2] + -1/(24*dy**2)*u[0, i] + 2/(3*dy**2)*u[1, i]
-                + (1/dx-5/(4*dy**2))*u[2, i] + 2/(3*dy**2)*u[3, i]
-                + (-1/(24*dy**2))*u[4, i] + (-1/(24*dy**2))*u[0, i+1])
+        # %% Use 4th-Order-Accurate scheme for j = 3 to j = Ny-2
 
-        # Store coefficients for second-from-last internal node
-        A[-2, -1] = -2/(3*dy**2)
-        A[-2, -2] = 5/(4*dy**2) + 1/dx
-        A[-2, -3] = -2/(3*dy**2)
-        A[-2, -4] = 1/(24*dy**2)
-        b[-2] = (y[-3] + -1/(24*dy**2)*u[-5, i] + 2/(3*dy**2)*u[-4, i]
-                 + (1/dx-5/(4*dy**2))*u[-3, i] + 2/(3*dy**2)*u[-2, i]
-                 + (-1/(24*dy**2))*u[-1, i] + (-1/(24*dy**2))*u[-1, i+1])
+        # Second internal node (j = 3)
+        # Calculate values of A(eta) and B(eta) at j
+        Ae = v[2, i]*etaY[2] - etaY[2]*etaYY[2]/RD
+        Be = -etaY[2]**2/RD
 
-        # Loop over internal nodes to compute and store coefficients
+        # Store coefficients and value for RHS vector b
+        A[1, 0] = -Ae/(3*de) + 2*Be/(3*de**2)
+        A[1, 1] = -5*Be/(4*de**2) + u[2, i]/dx
+        A[1, 2] = Ae/(3*de) + 2*Be/(3*de**2)
+        A[1, 3] = -Ae/(24*de) - Be/(24*de**2)
+        b[1] = (u[0, i]*(-Ae/(24*de) + Be/(24*de**2))
+                + u[1, i]*(Ae/(3*de) - 2*Be/(3*de**2))
+                + u[2, i]*(5*Be/(4*de**2) + u[2, i]/dx)
+                + u[3, i]*(-Ae/(3*de) - 2*Be/(3*de**2))
+                + u[4, i]*(Ae/(24*de) + Be/(24*de**2))
+                + u[0, i+1]*(-Ae/(24*de) + Be/(24*de**2)))
+
+        # %% Loop over internal nodes to compute and store coefficients
         for j in range(2, Ny-4):
-            A[j, j-2] = 1/(24*dy**2)
-            A[j, j-1] = -2/(3*dy**2)
-            A[j, j] = 5/(4*dy**2) + 1/dx
-            A[j, j+1] = -2/(3*dy**2)
-            A[j, j+2] = 1/(24*dy**2)
-            b[j] = (y[j+1] + -1/(24*dy**2)*u[j-1, i] + 2/(3*dy**2)*u[j, i]
-                    + (1/dx-5/(4*dy**2))*u[j+1, i] + 2/(3*dy**2)*u[j+2, i]
-                    + (-1/(24*dy**2))*u[j+3, i])
+            # Calculate values of A(eta) and B(eta) at j
+            Ae = v[j, i]*etaY[j] - etaY[j]*etaYY[j]/RD
+            Be = -etaY[j]**2/RD
 
+            A[j, j-2] = Ae/(24*de) - Be/(24*de**2)
+            A[j, j-1] = -Ae/(3*de) + 2*Be/(3*de**2)
+            A[j, j] = -5*Be/(4*de**2) + u[j, i]/dx
+            A[j, j+1] = Ae/(3*de) + 2*Be/(3*de**2)
+            A[j, j+2] = -Ae/(24*de) - Be/(24*de**2)
+            b[j] = (u[j-2, i]*(-Ae/(24*de) + Be/(24*de**2))
+                    + u[j-1, i]*(Ae/(3*de) - 2*Be/(3*de**2))
+                    + u[j, i]*(5*Be/(4*de**2) + u[j, i]/dx)
+                    + u[j+1, i]*(-Ae/(3*de) - 2*Be/(3*de**2))
+                    + u[j+2, i]*(Ae/(24*de) + Be/(24*de**2)))
+
+        # %% Second-to-last internal node (j = Ny-2)
+        # Calculate values of A(eta) and B(eta) at j
+        Ae = v[-3, i]*etaY[-3] - etaY[-3]*etaYY[-3]/RD
+        Be = -etaY[-3]**2/RD
+
+        # Store coefficients and value for RHS vector b
+        A[-2, -4] = Ae/(24*de) - Be/(24*de**2)
+        A[-2, -3] = -Ae/(3*de) + 2*Be/(3*de**2)
+        A[-2, -2] = -5*Be/(4*de**2) + u[-3, i]/dx
+        A[-2, -1] = Ae/(3*de) + 2*Be/(3*de**2)
+        b[-2] = (u[-5, i]*(-Ae/(24*de) + Be/(24*de**2))
+                 + u[-4, i]*(Ae/(3*de) - 2*Be/(3*de**2))
+                 + u[-3, i]*(5*Be/(4*de**2) + u[-3, i]/dx)
+                 + u[-2, i]*(-Ae/(3*de) - 2*Be/(3*de**2))
+                 + u[-1, i]*(Ae/(24*de) + Be/(24*de**2))
+                 + u[-1, i+1]*(Ae/(24*de) + Be/(24*de**2)))
+
+        # Perform matrix inversion to solve for u
         if method == 'lu':  # if input was for LU decomposition
             u[1:-1, i+1] = pentaLU(A, b)  # call the pentaLU solver
+
         if method == 'inv':  # if input was for built-in inv (for testing)
             u[1:-1, i+1] = (inv(A)@b).transpose()  # solve by inverting matrix
 
+        # %% u at x+1 has been solved for, now use continuity to solve for v
+
+        # Initialize matrix A and vector b for equation [[A]]*[v] = [b]
+        A = np.zeros([Ny - 1, Ny - 1])
+        b = np.zeros([Ny - 1, 1])
+
+        # Use third order FDS in eta, 2nd order Crank Nicolson in x
+        # Use biased 3rd order scheme for node adjacent to bottom boundary
+        A[0, 0] = -etaY[1]/(4*de)
+        A[0, 1] = etaY[1]/(2*de)
+        A[0, 2] = -etaY[1]/(12*de)
+        b[0] = ((u[j, i] - u[j, i+1])/dx
+                - etaY[1]/12*(-v[3, i]+6*v[2, i]-3*v[1, i])/de)
+
+        # One up from bottom boundary - now use 4th order scheme about j - 1/2
+        A[1, 0] = -9*etaY[2]/(16*de)
+        A[1, 1] = 9*etaY[2]/(16*de)
+        A[1, 2] = -etaY[2]/(48*de)
+        b[1] = ((u[2, i]-u[2, i+1])/dx
+                - (etaY[2]/48)*(27*v[1, i]-27*v[2, i]+v[3, i])/de)
+
+        # Loop over internal nodes - still used 4th order scheme about j - 1/2
+        for j in range(2, Ny-2):
+            A[j, j-2] = etaY[j+1]/(48*de)
+            A[j, j-1] = -9*etaY[j+1]/(16*de)
+            A[j, j] = 9*etaY[j+1]/(16*de)
+            A[j, j+1] = -etaY[j+1]/(48*de)
+            b[j] = ((u[j+1, i]-u[j+1, i+1])/dx - (etaY[j+1]/48)
+                    * (-v[j-2, i]+27*v[j-1, i]-27*v[j, i]+v[j+1, i])/de)
+
+        # Finally at top boundary use 3rd order scheme about Ny - 1/2
+        A[-1, -3] = 1
+        A[-1, -2] = -4
+        A[-1, -1] = 3
+        b[-1] = 0
+
+    # Perform matrix inversion to solve for v
+    if method == 'lu':  # if input was for LU decomposition
+        v[1:, i+1] = pentaLU(A, b)  # call the pentaLU solver
+    if method == 'inv':  # if input was for built-in inv (for testing)
+        v[1:, i+1] = (inv(A)@b).transpose()  # solve by inverting matrix
+
     # output is the u-matrix
-    return u
-    # End of main function
+    return u, y
 
 
-def makePlots(u):  # Display results spatially
+# %% Plot results
+# Define function to plot versus Blasius
+def plotsVsBlasius(u, y):
 
-    # Form x and y arrays
-    Ny, Nx = np.shape(u)
-    # Make linear-spaced 1D array of x-values from 0 to 1 with Nx elements
-    x = np.linspace(0, 1, Nx)
-    # Make linear-spaced 1D array of y-values from 0 to 1 with Ny elements
-    y = np.linspace(0, 1, Ny)
+    # Yes! It is possible to read text files in Python!
 
-    # Create contour plot of u vs x and y
-    plt.figure(figsize=(6, 4))
-    plt.contourf(x, y, u, cmap='plasma', levels=np.linspace(0., 1., 11))
-    cbar = plt.colorbar()
-    fs = 17  # Define font size for figures
-    fn = 'Calibri'  # Define font for figures
-    plt.xlabel('x', fontsize=fs, fontname=fn, fontweight='bold')
-    plt.ylabel('y' + '     ', fontsize=fs, rotation=0, fontname=fn,
-               fontweight='bold')
-    plt.xticks(fontsize=fs-2, fontname=fn, fontweight='bold')
-    plt.yticks(fontsize=fs-2, fontname=fn, fontweight='bold')
-    cbar.ax.set_ylabel('    u', rotation=0, fontname=fn, fontsize=fs,
-                       weight='bold')
-    cbar.ax.set_yticklabels([round(cbar.get_ticks()[n], 2)
-                            for n in range(len(cbar.get_ticks()))],
-                            fontsize=fs-2, fontname=fn, weight='bold')
-    plt.savefig(os.getcwd()+"\\figures\\contour"+str(Nx)+'_'+str(Ny)+".png",
-                dpi=320, bbox_inches='tight')  # save figure
+    # Read CSV containing Blasius solution and store variables
+    with open('readfiles//Blasius.csv', newline='') as csvfile:
+        reader = csv.reader(csvfile, delimiter=' ')
+        data = [row[0].split(',') for row in reader]
+        etaB = [eval(val) for val in data[0]]  # Store similarity variable list
+        g = [eval(val) for val in data[2]]  # Store normalized velocity list
+
+    xLoc = [0, 5, 10, 15, 20]  # Dimensional x-locations (m)
+    xMax = 20  # Dimensional distance in m
+    # Define given dimensional quantities
+    nuInf = 1.5e-6  # Dimensional freestream viscosity in m^2/s
+    uInf = 40  # Dimensional freestream velocity in m/s
+    deltaDim = 0.005  # Initial BL thickness in m
+    Nx = len(u[0, :])  # number of grid points in x-direction
+
+    delta99 = []  # initialize to store calculated 99% BL thickness values
+    xInds = []  # initialize to store x-indices corresponding to xLocs above
+    setbacks = []  # initialize array to store estimates for x~
+    # Loop through each x-location and solve for 99% BL thickness and estimate
+    # x~ based on each BL thickness
+    mrk = 0  # marker to count how many while loops
+    for xi in xLoc:
+        xInd = round(xi/xMax*(Nx-1))  # find index corresponding to that xLoc
+        xInds.append(xInd)
+        yInd = 0  # store index corresponding to BL height
+        while True:
+            if u[yInd, xInd] > 0.99:  # if 99% velocity satisfied
+                delta99.append(deltaDim*y[yInd])  # Store BL height (m)
+                setbacks.append(delta99[-1]**2*uInf/nuInf
+                                / 4.91**2-xLoc[mrk])
+                mrk += 1
+                break  # stop while loop
+            yInd += 1
+
+    # Dimensionalize velocity from Blasius solution
+    uB = [gi*uInf for gi in g]
+
+    # Dimensionalize y-coordinates for numerical solution
+    yDim = [deltaDim*yi for yi in y]
+
+    # Initialize figure with 5 subplots/axes
+    axs = ['ax' + str(n) for n in range(1, 6)]
+    fig, axs = plt.subplots(figsize=(8, 6), ncols=5,
+                            sharey='row')
+
+    # Loop through all desired positions and plot numerical result vs Blasius
+    for ii in range(5):
+        xCorr = xLoc[ii] + 0.005**2 * uInf / nuInf / 4.91**2
+        yB = [sqrt(xCorr)*etaBi/sqrt(uInf/nuInf) for etaBi in etaB]
+        ax = axs[ii]
+        ax.plot(uInf*u[:, xInds[ii]], yDim, 'r', uB, yB, 'k*')
+        ax.set_xlabel('u [m/s]', fontweight='bold')
+        ax.set_title('x = {0:0.0f} L'.format(xLoc[ii]/0.5))
+        if ii == 0:
+            ax.set_ylabel('y [m]        ', fontweight='bold', rotation=0)
+
+    plt.legend(['FDM', 'Blasius'])  # add legend
+    plt.ylim(ymin=0, ymax=0.01)  # axes limits
+    plt.savefig(os.getcwd()+"\\figures\\profiles.png", dpi=320,
+                bbox_inches='tight')  # save figure to file
     plt.close()  # close figure
 
-    # Look at solution at selected x-locations
-    xLocs = [0.05, 0.1, 0.2, 0.5, 1.0]
-    lines = ['y-', 'r-.', 'm--', 'b:', 'k-']  # define line styles
-    # Loop for each x-location to make plots at each location comparing exact
-    # solution with analytical solution
-    legStr = []  # initialize value to store strings for legend
-    plt.figure()  # create new figure
-    for n in range(len(xLocs)):
-        col = np.argmin(abs(x-xLocs[n]))  # extract value closest to given xLoc
-        plt.plot(u[:, col], y, lines[n])
-        legStr.append('x = {}'.format(xLocs[n]))  # append value to leg string
-    plt.legend(legStr, fontsize=fs-2)
-    plt.xlabel('u', fontsize=fs, fontname=fn, fontweight='bold')
-    plt.ylabel('y' + '     ', fontsize=fs, rotation=0, fontname=fn,
-               fontweight='bold')
-    plt.xticks(fontsize=fs-2, fontname=fn, fontweight='bold')
-    plt.yticks(fontsize=fs-2, fontname=fn, fontweight='bold')
-    plt.savefig(os.getcwd()+"\\figures\\curves"+str(Nx)+'_'+str(Ny)+".png",
-                dpi=320, bbox_inches='tight')  # save figure
-    plt.close()  # close figure
-    # End of makePlots function
+    # Estimate initial position using BL thickness at beginning
+    xInitial = 0.005**2*uInf/nuInf/4.91**2
+    # Print result to console
+    print('Estimated initial value of x~ is {0:0.2f} m'.format(xInitial))
+    # Output value of xInitial
+    return xInitial
 
 
-def errorPlots(u, u_an):  # function to plot error in u vs u_an
-    # Form x and y arrays
-    Ny, Nx = np.shape(u)
-    # Make linear-spaced 1D array of x-values from 0 to 1 with Nx elements
-    x = np.linspace(0, 1, Nx)
-    # Make linear-spaced 1D array of y-values from 0 to 1 with Ny elements
-    y = np.linspace(0, 1, Ny)
-    # Create contour plot of error (u-u_an) vs x and y
-    plt.figure(figsize=(6, 4))
-    cmax = round(np.amax(abs(u-u_an)), 3)  # maximum absolute contour value
-    lev = np.linspace(0, cmax, 11)
-    plt.contourf(x, y, abs(u-u_an), cmap='plasma',
-                 levels=lev)
-    cbar = plt.colorbar()  # make colorbar
-    fs = 17  # Define font size for figures
-    fn = 'Calibri'  # Define font for figures
-    # Label axes and set tick styles
-    plt.xlabel('x', fontsize=fs, fontname=fn, fontweight='bold')
-    plt.ylabel('y' + '     ', fontsize=fs, rotation=0, fontname=fn,
-               fontweight='bold')
-    plt.xticks(fontsize=fs-2, fontname=fn, fontweight='bold')
-    plt.yticks(fontsize=fs-2, fontname=fn, fontweight='bold')
-    cbar.ax.set_ylabel('                   |${u-u_{an}}$|', rotation=0,
-                       fontname=fn, fontsize=fs, weight='bold')
-    cbar.ax.set_yticklabels([round(cbar.get_ticks()[n], 4)
-                            for n in range(len(cbar.get_ticks()))],
-                            fontsize=fs-2, fontname=fn, weight='bold')
-    plt.savefig(os.getcwd()+"\\figures\\err_contour"+str(Nx)+'_'+str(Ny)+".png",
-                dpi=320, bbox_inches='tight')  # save figure
-    plt.close()  # close figure
+# %% Calculate displacement thickness and momentum thickness
+def thicc(u, y):  # function to compute displacement thickness, momentum
+    #               thickness, and shape factor
+    nuInf = 1.5e-6  # Dimensional freestream viscosity in m^2/s
+    uInf = 40  # Dimensional freestream velocity in m/s
+    deltaDim = 0.005  # Initial BL thickness in m
+    xInitial = 0.005**2*uInf/nuInf/4.91**2
+    Ny = len(y)  # Number of grid points in y-direction
+    deltaStar = 0  # initialize displacement thickness
+    thetaStar = 0  # initialize momentum thickness
+    for i in range(1, Ny):
+        uUi = ((1 - u[i, -1]) + (1 - u[i-1, -1]))/2  # find velocity deficit
+        dy = (y[i] - y[i-1])*deltaDim  # find dimensional y-height difference
+        deltaStar += (uUi)*dy  # add ith contribution
+        thetaStar += uUi*(1 - uUi)*dy  # add ith contribution
 
-    # Look at error in solution at selected x-locations
-    xLocs = [0.05, 0.1, 0.2, 0.5, 1.0]
-    lines = ['y-', 'r-.', 'm--', 'b:', 'k-']
-    # Loop for each x-location to make plots at each location comparing exact
-    # solution with analytical solution
-    legStr = []
-    plt.figure()  # create new figure
-    for n in range(len(xLocs)):
-        col = np.argmin(abs(x-xLocs[n]))  # extract value closest to given xLoc
-        plt.plot(abs(u[:, col]-u_an[:, col]), y, lines[n])
-        legStr.append('x = {}'.format(xLocs[n]))
-    plt.legend(legStr, fontsize=fs-2)
-    plt.xlabel('|${u-u_{an}}$|', fontsize=fs, fontname=fn, fontweight='bold')
-    plt.ylabel('y' + '     ', fontsize=fs, rotation=0, fontname=fn,
-               fontweight='bold')
-    plt.xticks(fontsize=fs-2, fontname=fn, fontweight='bold')
-    plt.yticks(fontsize=fs-2, fontname=fn, fontweight='bold')
-    plt.savefig(os.getcwd()+"\\figures\\err_curves"+str(Nx)+'_'+str(Ny)+".png",
-                dpi=320, bbox_inches='tight')  # save figure
-    plt.close()  # close figure
-    # End of errorPlots function
+    # Calculate Blasius estimates from solution
+    deltaStarBlasius = 1.702*sqrt(nuInf*(20+xInitial)/uInf)
+    thetaStarBlasius = 0.664*sqrt(nuInf*(20+xInitial)/uInf)
+
+    # Print results to console
+    print('Displacement thickness at x = 40 L is {0:0.6f} m'.format(deltaStar))
+    print('Estimated Blasius displacement thickness at x = 40 L is {0:0.6f} m'
+          .format(deltaStarBlasius))
+    print('Momentum thickness at x = 40 L is {0:0.6f} m'.format(thetaStar))
+    print('Estimated Blasius momentum thickness at x = 40 L is {0:0.6f} m'
+          .format(thetaStarBlasius))
 
 
-def plotDxDyEffects():  # function to plot effects of dx and dy spacings
-
-    # Data collected on variation of dx values (with dy constant at 0.05)
-    dxes = [0.05, 0.04, 0.0333333, 0.025, 0.02, 0.0166667, 0.0125, 0.01, 0.005,
-            0.0025, 0.00166667, 0.001]  # dx values themselves
-    dxerrs = [0.00276807, 0.00222227, 0.00183598, 0.00132455, 0.00101785,
-              0.000861093, 0.000647488, 0.000507671, 0.00019631, 3.41267e-05,
-              1.97199e-05, 3.37169e-05]  # maximum error in u
-    dxt = [0.3222, 0.343764, 0.406265, 0.406255, 0.499992, 0.499991, 0.609383,
-           0.671899, 0.843771, 1.70315, 2.55095, 4.21325]  # computation time
-    # Create plot to show effects of dx on error and computation time
-    plt.figure()
-    plt.loglog(dxes, dxerrs, 'ko', dxes, dxt, 'bx')  # plot on log-log axes
-    fs = 17  # Define font size for figures
-    fn = 'Calibri'  # Define font for figures
-    # Label axes and set tick styles
-    plt.xlabel('$\Delta$ x', fontsize=fs, fontname=fn, fontweight='bold')
-    # plt.ylabel('y' + '     ', fontsize=fs, rotation=0, fontname=fn,
-    #            fontweight='bold')
-    plt.xticks(fontsize=fs-2, fontname=fn, fontweight='bold')
-    plt.yticks(fontsize=fs-2, fontname=fn, fontweight='bold')
-    plt.legend(['Absolute error in u', 'Computation time [s]'])
-    plt.savefig(os.getcwd()+"\\figures\\dxEffect.png", dpi=320,
-                bbox_inches='tight')
-    plt.close()  # close figure
-
-    # Data collected on variation of dy values (with dx constant at 0.05)
-    # dy values themselves
-    dyes = [0.05, 0.04, 0.0333333, 0.025, 0.02, 0.0166667, 0.0125, 0.01, 0.005,
-            0.0025, 0.00166667, 0.001]
-    # maximum error in u
-    dyerrs = [0.00276807, 0.00278632, 0.00278221, 0.00278486, 0.00279274,
-              0.00279906, 0.002803, 0.00280316, 0.00280319, 0.00280319,
-              0.0028033, 0.00280335]
-    # computation time
-    dyt = [0.0937653, 0.109376, 0.140636, 0.171877, 0.218763, 0.265623,
-           0.34375, 0.425119, 0.859382, 1.73438, 2.61386, 4.33241]
-    # Create plot to show effects of dy on error and computation time
-    plt.figure()
-    plt.loglog(dyes, dyerrs, 'ko', dyes, dyt, 'bx')  # plot on log-log axes
-    # Label axes and set tick styles
-    plt.xlabel('$\Delta$ y', fontsize=fs, fontname=fn, fontweight='bold')
-    # plt.ylabel('y' + '     ', fontsize=fs, rotation=0, fontname=fn,
-    #            fontweight='bold')
-    plt.xticks(fontsize=fs-2, fontname=fn, fontweight='bold')
-    plt.yticks(fontsize=fs-2, fontname=fn, fontweight='bold')
-    plt.legend(['Absolute error in u', 'Computation time [s]'])
-    plt.savefig(os.getcwd()+"\\figures\\dyEffect.png", dpi=320,
-                bbox_inches='tight')
-    plt.close()  # close figure
-
-    # Data collected on varying both dx and dy together
-    dxdyes = [0.05, 0.04, 0.0333333, 0.025, 0.02, 0.0166667, 0.0125, 0.01,
-              0.005, 0.0025, 0.00166667, 0.001]  # dx and dy values themselves
-    dxdyerrs = [0.00276807, 0.00218433, 0.00185296, 0.00139747, 0.00110844,
-                0.000932838, 0.00069616, 0.000560447, 0.000280287, 0.000140149,
-                9.34256e-05, 5.60506e-05]
-    dxdyt = [0.0937514, 0.140621, 0.187512, 0.343739, 0.536466, 0.75001,
-             1.34378, 2.09376, 8.223, 32.7938, 77.9015, 207.268]
-    # Create plot to show effects of dy on error and computation time
-    plt.figure()
-    # plot on log-log axes
-    plt.loglog(dxdyes, dxdyerrs, 'ko', dxdyes, dxdyt, 'bx')
-    # Label axes and set tick styles
-    plt.xlabel('$\Delta$ x = $\Delta$ y', fontsize=fs, fontname=fn,
-               fontweight='bold')
-    plt.xticks(fontsize=fs-2, fontname=fn, fontweight='bold')
-    plt.yticks(fontsize=fs-2, fontname=fn, fontweight='bold')
-    plt.legend(['Absolute error in u', 'Computation time [s]'])
-    plt.savefig(os.getcwd()+"\\figures\\dxdyEffect.png", dpi=320,
-                bbox_inches='tight')
-    plt.close()
-    # End of plotDxDyEffects function
+# %% Define function to show effect of stretching on profile
+def stretchEffect(Nx, Ny, stretch):
+    uInf = 40  # freestream velocity
+    ls = ['r.', 'gx', 'b*', 'kd', 'mp', 'yh']  # line styles
+    # uuu = np.zeros([Ny, Nx, len(stretch)])  # initialize array to compare u
+    axs = ['ax' + str(n) for n in range(1, 1+len(stretch))]  # name axes
+    # set up subplots on same figure
+    fig, axs = plt.subplots(figsize=(8, 6), ncols=len(stretch), sharey='row')
+    # Loop for each stretching factor
+    for s in range(len(stretch)):
+        u, y = main(Nx, Ny, 'lu', stretch[s])  # get u and y from main
+        ax = axs[s]  # set axis number
+        ax.plot(u*uInf, y, ls[s])  # plot y vs u
+        ax.set_xlabel('u [m/s]', fontweight='bold')  # label x axis
+        ax.set_title('s = {0:0.0f}'.format(stretch[s]))  # label title
+        if s == 0:  # set y-label for the leftmost subplot
+                ax.set_ylabel('y [m]        ', fontweight='bold', rotation=0)
+    #    plt.savefig(os.getcwd()+"\\figures\\stretching.png", dpi=320,
+    #                bbox_inches='tight')  # save figure to file
 
 
-# Run functions in order
-t0 = time.time()  # begin timer
-Nx = 21  # number of nodes in x-direction
-Ny = 21  # number of nodes in y-direction
+# %% Run functions in order
+Nx = 41  # number of nodes in x-direction
+Ny = 151  # number of nodes in y-direction
+stretching = 5  # stretching factor
+u, y = main(Nx, Ny, 'lu', stretching)
 
-# execute main numerical solver to calculate u, use LU solver
-u = main(Nx, Ny, 'lu')
+# Plot results compared to Blasius solution and calculate initial x~ position
+plotsVsBlasius(u, y)
 
-# execute analytic solver to calculate u_analytic
-u_an = analytic(Nx, Ny)
+# Calculate thicknesses at end and compare to Blasius
+thicc(u, y)
 
-# run function to make plots of results for u
-makePlots(u)
-
-# run function to make plots of errors compared to analytic solution
-errorPlots(u, u_an)
-
-# calculate difference in time from current to when code started (elapsed time)
-elapsed = time.time() - t0
-
-# run function to make plots showing the effects of dx and dy spacing
-plotDxDyEffects()
-
-print('dx = {0:0.6}'.format(1/(Nx-1)))  # print current dx spacing
-print('dy = {0:0.6}'.format(1/(Ny-1)))  # print current dy spacing
-print('Max error in u is {0:0.6}'.format(np.amax(abs(u-u_an))))  # print error
-print('Elapsed time is {0:0.4}'.format(elapsed) + ' s.')  # print elapsed time
+# %% Run function to see effect of stretching
+stretch = [1, 5, 10]
+stretchEffect(Nx, Ny, stretch)
