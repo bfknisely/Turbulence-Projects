@@ -52,7 +52,7 @@ boundary layer. The effect of stretching factor is investigated.
 import numpy as np
 from numpy.linalg import inv
 import matplotlib.pyplot as plt
-from math import sin, pi, sinh, cosh, asinh, sqrt
+from math import sin, pi, sinh, cosh, asinh, sqrt, exp
 import csv
 import os
 
@@ -116,6 +116,123 @@ def pentaLU(A, b):  # Define LU Decomposition function to solve A*x = b for x
                                                  up[n, n+2]*xVec[0, n+2]))
     # Output value of x vector from function
     return xVec
+
+
+# %% Function to calculate eddy viscosity
+def eddyViscosity(u, v, x, y, i):
+    # inputs:   u = nondimensional x-velocity
+    #           v = nondimensional y-velocity
+    #           x = *dimensional* x-coordinates
+    #           y = nondimensional y-coordinates
+    #           i = index of x-step currently being evaluated
+
+    # Coefficients and dimensional constants
+    Aplus = 26.
+    alpha = 0.0168
+    kappa = 0.40
+    uInfDim = 40  # Dimensional freestream velocity in m/s
+    nuInfDim = 1.5e-6  # Dimensional freestream viscosity in m^2/s
+    LDim = 0.5  # Length of plate in m
+    deltaDim = 0.005  # Initial BL thickness in m
+
+    # Format inputs for use in this function
+    ui = u[:, i]*uInfDim  # current dimensional x-velocity
+    uiNorm = u[:, i]  # current nondimensional x-velocity
+    # Convert list of nondimensional y locations to array
+    # of dimensional y-values
+    yDim = deltaDim*np.array(y)
+    vDim = v*uInfDim*deltaDim/LDim
+
+    # Initialize arrays
+    dudy = np.zeros(len(y))
+    dvdx = np.zeros(len(y))
+
+    # Compute friction velocity (scalar) with dimensional quantities
+    # and 3rd order Finite Difference Method
+    uTau = (nuInfDim*(-ui[2]+4*ui[1]-3*ui[0]) / (yDim[2]-yDim[0]))**(1/2)
+
+    # Compute yPlus (vector)
+    yPlus = yDim*uTau/nuInfDim
+
+    # Compute mixingLength (vector)
+    mixingLength = [kappa*yDim[i]*(1-exp(-yPlus[i]/Aplus))
+                    for i in range(len(y))]
+
+    # Compute nuTi (vector) for all y-values
+    # using 3rd-order scheme in y and 1st-order scheme in x
+    # First calculate u-gradient in y using current x-step
+    dudy[0] = (-ui[2]+4*ui[1]-3*ui[0]) / (yDim[2]-yDim[0])
+    for j in range(1, len(y)-1):
+        dudy[j] = (-ui[j+1]+4*ui[j]-3*ui[j-1]) / (yDim[j+1]-yDim[j-1])
+    dudy[-1] = (-ui[-1]+4*ui[-2]-3*ui[-3]) / (yDim[-1]-yDim[-3])
+    # Next calculate v-gradient in x using current and previous x-steps
+    # First-order backward difference
+    for j in range(0, len(y)):
+        dvdx[j] = (vDim[j, i] - vDim[j, i-1])/(x[i]-x[i-1])
+    # Compute nuTi using calculated derivatives
+    nuti = [mixingLength[i]**2*sqrt(dudy[i]**2+dvdx[i]**2)
+            for i in range(len(y))]
+
+    # Compute delta99 (scalar) and deltaStar (scalar)
+    deltaStar = 0  # initialize scalars
+    delta99 = 0  # initialize scalars
+    idx = np.argmin(abs(uiNorm-0.99))
+    # linear interpolate between nearest points to get better estimate for d99
+    if uiNorm[idx] < 0.99:
+        delta99 = yDim[idx+1]-(uiNorm[idx+1]-0.99)*(yDim[idx+1]-yDim[idx])/(
+                  uiNorm[idx+1]-uiNorm[idx])
+    else:
+        delta99 = yDim[idx]-(uiNorm[idx]-0.99)*(yDim[idx]-yDim[idx-1])/(
+                  uiNorm[idx]-uiNorm[idx-1])
+    # integrate from y = 0 to t = delta99 to calculate deltaStar (scalar)
+    for j in range(1, idx):
+        dy = (y[j] - y[j-1])*deltaDim  # calculate dimensional y-difference
+        integrand = ((1 - u[j, i]) + (1 - u[j-1, i]))/2
+        deltaStar += integrand*dy  # add sections using trapezoidal integration
+
+    # Compute F_KLEB (vector)
+    fKleb = (1 + 5.5*((yDim/delta99)**6))**-1
+
+    # Compute nuto (vector) for all y-values
+    nuto = alpha*uInfDim*deltaStar*fKleb
+
+    # Combine nuti and nuto into a single nut variable (vector)
+    nut = np.zeros(len(nuti))
+    zone = 'inner'  # initialize variable to set whether in inner or outer zone
+    for n in range(len(nuti)):
+        if nuti[n] > nuto[n]:  # check whether inner is greater than outer
+            if zone == 'inner':  # if first time condition is satisfied
+                ym = yDim[n]  # store value of ym
+            zone = 'outer'  # if so, begin assigning outer values
+        if zone == 'inner':
+            nut[n] = nuti[n]
+        else:
+            nut[n] = nuto[n]
+
+    # Numerically differentiate to calculate dnut/dy (vector)
+    # using 3rd order finite difference method
+    dnutdy = np.zeros(len(nut))
+    dnutdy[0] = (-nut[2]+4*nut[1]-3*nut[0]) / (yDim[2]-yDim[0])
+    for j in range(len(nut)-1):
+        dnutdy[j] = (-nut[j+1]+4*nut[j]-3*nut[j-1]) / (yDim[j+1]-yDim[j-1])
+    dnutdy[-1] = (-nut[-1]+4*nut[-2]-3*nut[-3]) / (yDim[-1]-yDim[-3])
+
+    return nut, dnutdy  # output eddy viscosity vector and its derivative
+
+#    # Plot viscosity results to verify
+#    plt.loglog(yDim, nuti)  # plot dimensional y versus inner eddy viscosity
+#    plt.loglog(yDim, nuto)  # plot dimensional y versus outer eddy viscosity
+#    plt.loglog(yDim, nut, 'k:', linewidth=3)  # dimensional y versus combined
+#    # label legend and axes
+#    plt.legend(['inner', 'outer', 'combined'])
+#    plt.xlabel('y [m]')
+#    plt.ylabel(r'$\nu_T$ [m$^2$/s]              ', rotation=0)
+#    # add text to indicate location of ym
+#    plt.text(ym, min(nut[round(len(nut)/2):]), r'$y_m$',
+#             horizontalalignment='center')
+#    # save figure
+#    plt.savefig(os.getcwd()+"\\figures\\profiles.png", dpi=320,
+#                bbox_inches='tight')  # save figure to file
 
 
 # %% Main function
@@ -207,13 +324,20 @@ def main(Nx, Ny, method, s):  # Define main function to set up grid and matrix
         # Y-dimension reduced by two because u(x, 0) and u(x, 1)
         # are known already
 
+        # Compute turbulent viscosity based on previous x-step velocities
+        nut, dnutdy = eddyViscosity(u, v, x, y, i)  # call function
+        nutNorm = nut/nuInfDim
+        dnutde = nuInfDim*deltaDim/etaY * dnutdy
+
         # %% Use 2nd-Order-Accurate scheme for first interior nodes
 
         # at j = 2 (near bottom border of domain)
         # Calculate values of A(eta) and B(eta) at j = 2
         j = 1  # note python indices start at 0, not 1
-        Ae = dx/(2*u[j, i]) * (v[j, i]*etaY[j] - etaYY[j]/RD)
-        Be = -dx/(2*u[j, i]) * etaY[j]**2/RD
+        Ae = dx/(2*u[j, i]) * (v[j, i]*etaY[j] - 1/RD
+                               * ((1+nutNorm[j])*etaYY[j]
+                               + dnutde[j]*etaY[j]**2))
+        Be = -dx/(2*u[j, i]) * (1+nutNorm[j]) * etaY[j]**2/RD
 
         # Populate coefficient matrix
         A[0, 0] = 1 - 2*Be/de**2  # Assign value in matrix location [1, 1]
@@ -225,8 +349,10 @@ def main(Nx, Ny, method, s):  # Define main function to set up grid and matrix
         # Second internal node (j = 3)
         # Calculate values of A(eta) and B(eta) at j
         j = 2
-        Ae = dx/(2*u[j, i]) * (v[j, i]*etaY[j] - etaYY[j]/RD)
-        Be = -dx/(2*u[j, i]) * etaY[j]**2/RD
+        Ae = dx/(2*u[j, i]) * (v[j, i]*etaY[j] - 1/RD
+                               * ((1+nutNorm[j])*etaYY[j]
+                               + dnutde[j]*etaY[j]**2))
+        Be = -dx/(2*u[j, i]) * (1+nutNorm[j]) * etaY[j]**2/RD
 
         # Store coefficients and value for RHS vector b
         A[1, 0] = (-2*Ae/de + 4*Be/de**2)/3
@@ -241,8 +367,10 @@ def main(Nx, Ny, method, s):  # Define main function to set up grid and matrix
         # %% Loop over internal nodes to compute and store coefficients
         for j in range(3, Ny-3):
             # Calculate values of A(eta) and B(eta) at j
-            Ae = dx/(2*u[j, i]) * (v[j, i]*etaY[j] - etaYY[j]/RD)
-            Be = -dx/(2*u[j, i]) * etaY[j]**2/RD
+            Ae = dx/(2*u[j, i]) * (v[j, i]*etaY[j] - 1/RD
+                                   * ((1+nutNorm[j])*etaYY[j]
+                                   + dnutde[j]*etaY[j]**2))
+            Be = -dx/(2*u[j, i]) * (1+nutNorm[j]) * etaY[j]**2/RD
             A[j-1, j-3] = Ae/(12*de) - Be/(12*de**2)
             A[j-1, j-2] = -2/3*Ae/de + 4/3*Be/de**2
             A[j-1, j-1] = 1 - 5/2*Be/de**2
@@ -257,8 +385,10 @@ def main(Nx, Ny, method, s):  # Define main function to set up grid and matrix
         # %% Second-to-last internal node (j = Ny-2)
         # Calculate values of A(eta) and B(eta) at j
         j = Ny-3
-        Ae = dx/(2*u[j, i]) * (v[j, i]*etaY[j] - etaYY[j]/RD)
-        Be = -dx/(2*u[j, i]) * etaY[j]**2/RD
+        Ae = dx/(2*u[j, i]) * (v[j, i]*etaY[j] - 1/RD
+                               * ((1+nutNorm[j])*etaYY[j]
+                               + dnutde[j]*etaY[j]**2))
+        Be = -dx/(2*u[j, i]) * (1+nutNorm[j]) * etaY[j]**2/RD
 
         # Store coefficients and value for RHS vector b
         A[-2, j-3] = Ae/(12*de) - Be/(12*de**2)
@@ -274,8 +404,10 @@ def main(Nx, Ny, method, s):  # Define main function to set up grid and matrix
         # %% at j = Ny-1 (near top border of domain)
         # Calculate values of A(eta) and B(eta) at j = Ny-1
         j = Ny-2
-        Ae = dx/(2*u[j, i]) * (v[j, i]*etaY[j] - etaYY[j]/RD)
-        Be = -dx/(2*u[j, i]) * etaY[j]**2/RD
+        Ae = dx/(2*u[j, i]) * (v[j, i]*etaY[j] - 1/RD
+                               * ((1+nutNorm[j])*etaYY[j]
+                               + dnutde[j]*etaY[j]**2))
+        Be = -dx/(2*u[j, i]) * (1+nutNorm[j]) * etaY[j]**2/RD
 
         # Populate coefficient matrix
         A[-1, -1] = 1 - 2*Be/de**2  # Assign value to last diagonal element
