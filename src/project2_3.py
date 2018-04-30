@@ -7,7 +7,7 @@ Created on Thu Mar 15 19:06:50 2018
 @author: Brian
 
 AERSP/ME 525: Turbulence and Applications to CFD: RANS
-Computer Project Number 2
+Computer Project Number 3
 
 The purpose of this code is to use finite difference to solve the laminar
 boundary layer equations for a 2D flat plate and compare to the Blasius
@@ -52,7 +52,7 @@ boundary layer. The effect of stretching factor is investigated.
 import numpy as np
 from numpy.linalg import inv
 import matplotlib.pyplot as plt
-from math import sin, pi, sinh, cosh, asinh, sqrt, exp
+from math import sin, pi, sinh, cosh, asinh, sqrt, exp, log
 import csv
 import os
 
@@ -119,7 +119,7 @@ def pentaLU(A, b):  # Define LU Decomposition function to solve A*x = b for x
 
 
 # %% Function to calculate eddy viscosity
-def eddyViscosity(u, v, x, y, i):
+def eddyViscosity(u, v, x, y, i, uInfDim):
     # inputs:   u = nondimensional x-velocity
     #           v = nondimensional y-velocity
     #           x = *dimensional* x-coordinates
@@ -130,7 +130,6 @@ def eddyViscosity(u, v, x, y, i):
     Aplus = 26.
     alpha = 0.0168
     kappa = 0.40
-    uInfDim = 40  # Dimensional freestream velocity in m/s
     nuInfDim = 1.5e-6  # Dimensional freestream viscosity in m^2/s
     LDim = 0.5  # Length of plate in m
     deltaDim = 0.005  # Initial BL thickness in m
@@ -201,8 +200,6 @@ def eddyViscosity(u, v, x, y, i):
     zone = 'inner'  # initialize variable to set whether in inner or outer zone
     for n in range(len(nuti)):
         if nuti[n] > nuto[n]:  # check whether inner is greater than outer
-            if zone == 'inner':  # if first time condition is satisfied
-                ym = yDim[n]  # store value of ym
             zone = 'outer'  # if so, begin assigning outer values
         if zone == 'inner':
             nut[n] = nuti[n]
@@ -236,28 +233,29 @@ def eddyViscosity(u, v, x, y, i):
 
 
 # %% Main function
-def main(Nx, Ny, method, s):  # Define main function to set up grid and matrix
-    #                           and march in x-direction using Crank-Nicolson
-    #                           algorithm
+def main(Nx, Ny, method, s, uInfDim):
+    # Define main function to set up grid and matrix and march in x-direction
+    # using Crank-Nicolson algorithm
 
     #    Inputs:  Nx = number of nodes in x-direction
     #             Ny = number of nodes in y-direction
     #             method = "lu" or "inv" for matrix inversion
     #             s = stretching factor
+    #             uInfDim = dimensional freestream velocity in m/s
 
     # Inputs for testing
     # Nx = 41
     # Ny = 151
     # method = 'lu'
     # s = 5
+    # uInfDim = 40
 
     # Define bounds of computational domain
     xMax = 20  # Dimensional distance in m
-    yMax = 50  # Scaled by BL height
+    yMax = 50  # nondimensional, Scaled by BL height
 
     # Define given dimensional quantities
     nuInfDim = 1.5e-6  # Dimensional freestream viscosity in m^2/s
-    uInfDim = 40  # Dimensional freestream velocity in m/s
     LDim = 0.5  # Length of plate in m
     deltaDim = 0.005  # Initial BL thickness in m
 
@@ -277,8 +275,9 @@ def main(Nx, Ny, method, s):  # Define main function to set up grid and matrix
     fPrime = [s*yMax*cosh(s*et)/sinh(s) for et in eta]
     fDoublePrime = [s**2*yMax*sinh(s*et)/sinh(s) for et in eta]
     # Determine etaY and etaYY
-    etaY = [1/fP for fP in fPrime]
-    etaYY = [-fDoublePrime[n]/(fPrime[n]**3) for n in range(len(fPrime))]
+    etaY = np.array([1/fP for fP in fPrime])
+    etaYY = np.array([-fDoublePrime[n]/(fPrime[n]**3)
+                      for n in range(len(fPrime))])
 
     # Calculate spacings dx and de; constant with the uniform x-eta grid
     dx = x[1] - x[0]
@@ -325,7 +324,7 @@ def main(Nx, Ny, method, s):  # Define main function to set up grid and matrix
         # are known already
 
         # Compute turbulent viscosity based on previous x-step velocities
-        nut, dnutdy = eddyViscosity(u, v, x, y, i)  # call function
+        nut, dnutdy = eddyViscosity(u, v, x, y, i, uInfDim)  # call function
         nutNorm = nut/nuInfDim
         dnutde = nuInfDim*deltaDim/etaY * dnutdy
 
@@ -505,8 +504,8 @@ def main(Nx, Ny, method, s):  # Define main function to set up grid and matrix
     if method == 'inv':  # if input was for built-in inv (for testing)
         v[1:, i+1] = (inv(A)@b).transpose()  # solve by inverting matrix
 
-    # output is the u-matrix
-    return u, y
+    # output is the u-matrix, v-matrix, and nondimensional x- and y-vectors
+    return u, v, x, y
 
 
 # %% Plot results
@@ -572,15 +571,14 @@ def plotsVsBlasius(u, y):
             ax.set_ylabel('y [m]        ', fontweight='bold', rotation=0)
 
     plt.legend(['FDM', 'Blasius'])  # add legend
-    plt.ylim(ymin=0, ymax=0.01)  # axes limits
-    plt.savefig(os.getcwd()+"\\figures\\profiles.png", dpi=320,
-                bbox_inches='tight')  # save figure to file
-    plt.close()  # close figure
+    plt.ylim(ymin=0, ymax=0.1)  # axes limits
+    # plt.savefig(os.getcwd()+"\\figures\\profiles.png", dpi=320,
+    #            bbox_inches='tight')  # save figure to file
+    # plt.close()  # close figure
 
     # Estimate initial position using BL thickness at beginning
     xInitial = 0.005**2*uInf/nuInf/4.91**2
-    # Print result to console
-    print('Estimated initial value of x~ is {0:0.2f} m'.format(xInitial))
+
     # Output value of xInitial
     return xInitial
 
@@ -614,7 +612,7 @@ def thicc(u, y):  # function to compute displacement thickness, momentum
           .format(thetaStarBlasius))
 
 
-# Define function to show effect of stretching on profile
+# %% Define function to show effect of stretching on profile
 def stretchEffect(Nx, Ny, stretch):
     uInf = 40  # freestream velocity
     ls = ['r.', 'gx', 'b*', 'kd', 'mp', 'yh']  # line styles
@@ -635,21 +633,102 @@ def stretchEffect(Nx, Ny, stretch):
                     bbox_inches='tight')  # save figure to file
 
 
+# %% Define function to compare end profile to the "Law of the Wall"
+def lawOfTheWall(u, y, uInfDim):
+    ui = u[:, -1]*uInfDim  # final column of x-velocity values (dimensional)
+    nuInfDim = 1.5e-6  # dimensional viscosity
+    deltaDim = 0.005
+    yDim = np.array(y)*deltaDim
+    # inputs are u-matrix and y-vector (both nondimensional)
+    print("haha")
+    uStar = (nuInfDim*(-ui[2]+4*ui[1]-3*ui[0]) / (yDim[2]-yDim[0]))**(1/2)
+
+    # Compute yPlus (vector)
+    yPlus = yDim*uStar/nuInfDim
+    uPlus = ui/uStar
+
+    plt.figure()
+    plt.semilogx(yPlus, uPlus, linewidth=3)
+    yPlus[yPlus == 0] = 1e-20
+    uPlusLin = yPlus
+    uPlusLog = [1/0.41 * log(yPlusi) + 5.1 for yPlusi in yPlus]
+    plt.semilogx(yPlus[1:], uPlusLin[1:], '--r', linewidth=2)
+    plt.semilogx(yPlus[1:], uPlusLog[1:], '-.')
+    plt.xlabel('y+')
+    plt.ylabel('u+     ', rotation=0)
+    plt.xlim([1, 100])
+    plt.ylim([0, 20])
+    plt.text(30, 12, 'log region')
+    plt.text(5, 3, 'linear region')
+    plt.legend(['Numerical solution', 'u+ = y+', 'u+ = 1/k ln(y+) + B'])
+
+
+# %% Define function to calculate 99% BL thickness for all x-locations
+# and also output analytical solution
+def delta99(u, x, y, uInfDim):
+    nuInfDim = 1.5e-6  # dimensional viscosity
+    deltaDim = 0.005  # dimensional starting BL height
+    # Compute ith component of delta99
+    delta = np.zeros(np.shape(u)[1])  # initialize array
+    for i in range(np.shape(u)[1]):
+        uiNorm = u[:, i]
+        idx = np.argmin(abs(uiNorm-0.99))
+        # linear interpolate between nearest points to get better estimate
+        if uiNorm[idx] < 0.99:
+            delta[i] = (y[idx+1]-(uiNorm[idx+1]-0.99)
+                        * (y[idx+1]-y[idx])
+                        / (uiNorm[idx+1]-uiNorm[idx]))
+        else:
+            delta[i] = (y[idx]-(uiNorm[idx]-0.99)*(y[idx]-y[idx-1])
+                        / (uiNorm[idx]-uiNorm[idx-1]))
+
+    Rex = uInfDim*x/nuInfDim  # calculate Reynolds Number based on x-distance
+    # replace 0s with very small number to prevent divide by zero
+    Rex[Rex == 0] = 1e-16
+    deltaAn = 0.375*x*(Rex)**(-1/5)/deltaDim
+    plt.figure()
+    plt.plot(x, delta*deltaDim, linewidth=3)
+    plt.plot(x, deltaAn*deltaDim, 'r--')
+    plt.xlabel('x [m]')
+    plt.ylabel(r'$\delta$ [m]       ', rotation=0)
+    plt.legend(['Numerical solution', r'0.375x(Re$_x)^{-1/5}$'])
+
+    # Return dimensional BL height at final profile (x = 20 m)
+    return delta[-1]*deltaDim
+
+
+# Define function to determine virtual origin of turbulent BL
+def virtualOrigin(x, uInfDim, deltaEnd):
+    nuInfDim = 1.5e-6
+    xOrig = (deltaEnd/0.375 * (nuInfDim/uInfDim)**-0.2)**(5/4)
+    return xOrig
+
+
 # %% Run functions in order
-Nx = 41  # number of nodes in x-direction
+Nx = 141  # number of nodes in x-direction
 Ny = 251  # number of nodes in y-direction
-stretching = 5  # stretching factor
-u, y = main(Nx, Ny, 'lu', stretching)
+s = 5  # stretching factor
+uInfDim = 40  # dimensional freestream velocity in m/s
+deltaDim = 0.005  # dimensional starting BL height
+u, v, x, y = main(Nx, Ny, 'lu', s, uInfDim)
 
-plt.contourf(u)
-plt.colorbar()
+u[u > 1] = 1  # correct numerical noise for values slightly above 1
 
-## Plot results compared to Blasius solution and calculate initial x~ position
-#plotsVsBlasius(u, y)
-#
-## Calculate thicknesses at end and compare to Blasius
-#thicc(u, y)
-#
-## %% Run function to see effect of stretching
-#stretch = [1, 5, 10]
-#stretchEffect(Nx, Ny, stretch)
+plt.figure()
+plt.contourf(x, np.array(y)*deltaDim, u*uInfDim,
+             levels=np.linspace(0, uInfDim, num=17))
+cbar = plt.colorbar()
+cbar.set_label('           u [m/s]', rotation=0)
+plt.xlabel('x [m]')
+plt.ylabel('y [m]')
+plt.savefig(os.getcwd()+"\\figures\\turbVelocityContour.png", dpi=320,
+            bbox_inches='tight')  # save figure to file
+
+
+# Plot 99% BL thickness growth and return BL height at final profile
+deltaEnd = delta99(u, x, y, uInfDim)
+
+lawOfTheWall(u, y, uInfDim)
+
+xOrig = virtualOrigin(u, uInfDim, deltaEnd)
+print('Turbulent BL origin is at {0:.2f} meters.'.format(20-xOrig))
